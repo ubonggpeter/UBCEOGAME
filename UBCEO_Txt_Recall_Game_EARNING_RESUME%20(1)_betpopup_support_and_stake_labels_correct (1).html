@@ -1,0 +1,3356 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Text Recall Game</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+    }
+
+    body.game-active {
+      padding: 64px 0 0 0;
+    }
+    .navbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      background-color: #ffffffcc;
+      display: none;
+      justify-content: space-between;
+      padding: 10px;
+      border-bottom: 1px solid #ddd;
+      z-index: 1000;
+    }
+
+    body.game-active .navbar {
+      display: flex;
+    }
+    #user-info, #score-board {
+      font-weight: bold;
+    }
+    .word-input {
+      border: none;
+      border-bottom: 2px solid #000;
+      background: transparent;
+      text-align: center;
+      font-size: 16px;
+      outline: none;
+      max-width: 100%;
+    }
+    .word-input.correct { color: green; border-bottom: 2px solid green; }
+    .word-input.wrong { color: red; border-bottom: 2px solid red; }
+    .correct-word {
+      color: rgba(0, 128, 0, 0.3);
+      font-size: 12px;
+      font-weight: bold;
+      display: block;
+      text-align: center;
+      margin-bottom: -4px;
+    }
+    #game-area {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .paragraph-block {
+      animation: fadeIn 0.5s ease forwards;
+      background: white;
+      border-radius: 8px;
+      padding: 15px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    #results { margin-top: 30px; padding: 20px; }
+    .center-button { display: flex; justify-content: center; margin: 10px auto; }
+    @media (max-width: 377px) {
+      .word-input { font-size: 14px; width: 100%; }
+      textarea, select, input, button {
+        width: 100%;
+        font-size: 16px;
+      }
+      .navbar {
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+      }
+    }
+  
+    /* =========================
+       Popup Form (Magnus-like)
+       ========================= */
+    .overlay{
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.65);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s ease;
+      z-index: 999;
+    }
+    .modal{
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 22px;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(12px) scale(.985);
+      transition: opacity .25s ease, transform .25s ease;
+      z-index: 1000;
+    }
+    .modal-card{
+      width: min(560px, 100%);
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.14);
+      box-shadow: 0 30px 90px rgba(0,0,0,.55);
+      border-radius: 22px;
+      padding: 18px 16px 16px;
+      position: relative;
+    }
+    .modal-title{
+      margin: 6px 0 2px;
+      font-size: 20px;
+      letter-spacing: .2px;
+    }
+    .modal-subtitle{
+      margin: 0 0 12px;
+      opacity: .85;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+    .modal-close{
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 27px;
+      height: 27px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.06);
+      color: #fff;
+      font-size: 22px;
+      cursor: pointer;
+    }
+    .modal-close:active{ transform: scale(.98); }
+
+    /* Modal open state */
+    body.modal-open #form-overlay{
+      opacity: 1;
+      pointer-events: none;
+    }
+    body.modal-open #form-modal{
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0) scale(1);
+    }
+
+    /* Make the original form blend into the card */
+    #game-form{
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+    }
+    #game-form input, #game-form textarea, #game-form select{
+      width: 100%;
+      margin: 8px 0;
+      padding: 12px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.20);
+      color: #fff;
+      outline: none;
+    }
+    #game-form textarea{ min-height: 84px; resize: vertical; }
+    #game-form button[type="submit"]{
+      width: 100%;
+      margin-top: 10px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(102,187,106,.55);
+      background: rgba(102,187,106,.18);
+      color: #eafff2;
+      cursor: pointer;
+      font-weight: 700;
+      letter-spacing: .2px;
+    }
+
+    /* ===== Student/Fans + Payment flows overlay ===== */
+    body.role-open #role-overlay,
+    body.school-open #role-overlay,
+    body.fans-open #role-overlay,
+    body.support-open #role-overlay,
+    body.support-pay-open #role-overlay,
+    body.pm-open #role-overlay,
+    body.usdt-open #role-overlay{
+      opacity: 1;
+      pointer-events: none; /* locked: no cancel */
+    }
+    body.role-open #role-modal{
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0) scale(1);
+    }
+    body.school-open #school-modal{
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0) scale(1);
+    }
+    body.fans-open #fans-modal{
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0) scale(1);
+    }
+
+    .role-grid{
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 10px;
+    }
+    .role-btn{
+      padding: 14px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.06);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 800;
+      letter-spacing: .2px;
+    }
+    .role-btn:active{ transform: scale(.99); }
+
+    #school-form, #fans-form{
+      width: 100%;
+    }
+    #school-form input, #fans-form input, #fans-form select, #school-form select{
+      width: 100%;
+      margin: 8px 0;
+      padding: 12px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.20);
+      color: #fff;
+      outline: none;
+    }
+    #school-form button, #fans-form button{
+      width: 100%;
+      margin-top: 10px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(102,187,106,.55);
+      background: rgba(102,187,106,.18);
+      color: #eafff2;
+      cursor: pointer;
+      font-weight: 700;
+      letter-spacing: .2px;
+    }
+
+    .support-text{
+      margin: 12px 0 0;
+      font-size: 12.5px;
+      opacity: .9;
+      line-height: 1.35;
+    }
+    .support-link{
+      border: 0;
+      padding: 0;
+      margin: 6px 0 0;
+      background: transparent;
+      color: #66bb6a;
+      font-weight: 900;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .support-list{
+      display: grid;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .support-item{
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.06);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 900;
+      text-align: left;
+    }
+    .support-item:active{ transform: scale(.99); }
+
+    #custom-amount-wrap input{
+      width: 100%;
+      margin: 8px 0;
+      padding: 12px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.20);
+      color: #fff;
+      outline: none;
+    }
+    #custom-amount-wrap button,
+    #submit-support-proof{
+      width: 100%;
+      margin-top: 10px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(102,187,106,.55);
+      background: rgba(102,187,106,.18);
+      color: #eafff2;
+      cursor: pointer;
+      font-weight: 900;
+      letter-spacing: .2px;
+    }
+
+    body.support-open #support-modal{
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0) scale(1);
+    }
+    body.support-pay-open #support-payment-modal{
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0) scale(1);
+    }
+
+    .pay-box{
+      margin-top: 8px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.18);
+      overflow: hidden;
+    }
+    .pay-row{
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+      padding: 12px;
+      border-top: 1px solid rgba(255,255,255,.08);
+    }
+    .pay-row:first-child{ border-top: 0; }
+    .pay-label{ font-size: 12px; opacity: .75; }
+    .pay-value{ font-size: 14px; font-weight: 900; word-break: break-all; }
+    .copy-btn{
+      justify-self: start;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.06);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 900;
+      width: max-content;
+    }
+    .timer-wrap{ margin-top: 10px; }
+    .timer{
+      font-weight: 900;
+      font-size: 22px;
+      margin-top: 4px;
+      letter-spacing: 1px;
+    }
+    .tiny-note{
+      margin: 10px 0 0;
+      font-size: 11px;
+      opacity: .75;
+      line-height: 1.35;
+    }
+
+    .pm-item{
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.06);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 900;
+      text-align: left;
+    }
+    .pm-item:active{ transform: scale(.99); }
+
+    body.pm-open #pay-method-modal{
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0) scale(1);
+    }
+    body.usdt-open #usdt-modal{
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0) scale(1);
+    }
+
+    .back-btn{
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.06);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 900;
+    }
+    .back-btn:active{ transform: scale(.98); }
+
+    /* Hide donate card background when support flow starts */
+    body.support-open #role-modal,
+    body.pm-open #role-modal,
+    body.support-pay-open #role-modal,
+    body.usdt-open #role-modal{
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Move back button below modal card */
+    .back-btn{
+      position: static;
+      display: block;
+      width: 100%;
+      margin-top: 14px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.06);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 900;
+      text-align: center;
+    }
+
+    /* Hide  Payment Method card when proceeding */
+    body.support-pay-open #pay-method-modal,
+    body.usdt-open #pay-method-modal{
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Smaller back button at bottom of popup card */
+    .back-btn{
+      display: block;
+      width: 80%;
+      margin: 16px auto 0;
+      padding: 6px 8px;
+      font-size: 11px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.04);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 700;
+      text-align: center;
+      opacity: .85;
+    }
+
+    /* Reduce width of submit payment proof buttons by 30% */
+    #submit-support-proof,
+    #submit-usdt-proof{
+      width: 70%;
+      margin: 14px auto 0;
+      display: block;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(102,187,106,.55);
+      background: rgba(102,187,106,.18);
+      color: #eafff2;
+      cursor: pointer;
+      font-weight: 900;
+      letter-spacing: .2px;
+      text-align: center;
+    }
+
+/* ===== Rules popup (shows when user clicks Start Game) ===== */
+body.rules-open #rules-overlay{
+  opacity: 1;
+  pointer-events: none; /* locked: use Continue button */
+}
+body.rules-open #rules-modal{
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+
+/* ===== Result popup ===== */
+body.result-open #result-overlay{
+  opacity: 1;
+  pointer-events: none;
+}
+body.result-open #result-modal{
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+
+/* ===== Anti-copy (best-effort) ===== */
+body.game-active, body.game-active *{
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+/* Allow typing/selecting inside inputs */
+body.game-active input,
+body.game-active textarea,
+body.game-active select,
+body.game-active button{
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* ===== Countdown popup ===== */
+body.countdown-open #countdown-overlay{
+  opacity: 1;
+  pointer-events: none;
+}
+body.countdown-open #countdown-modal{
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+
+/* ===== Top 5 Winners – Place Your Bet popup ===== */
+
+/* ===== Bet Popup Responsive Layout (no scrolling) ===== */
+#bet-modal .modal-card{
+  width: min(560px, 96vw) !important;
+  padding: 14px 12px !important;
+}
+#bet-modal .modal-title{ font-size: clamp(18px, 4.8vw, 22px) !important; }
+#bet-modal .modal-subtitle{ font-size: clamp(12px, 3.6vw, 14px) !important; margin-top: 6px !important; }
+#bet-modal .trophy-emoji{ font-size: clamp(34px, 10vw, 52px) !important; }
+#bet-winners{
+  width: 100% !important;
+  margin-top: 10px !important;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+@media (min-width: 364px){
+  #bet-winners{ grid-template-columns: 1fr 1fr; }
+}
+#bet-winners > .bet-header{ grid-column: 1 / -1; margin-bottom: 0 !important; }
+.bet-row{
+  margin: 0 !important;
+  padding: 10px !important;
+}
+.bet-row label{ align-items: center !important; }
+.bet-row .bet-meta{ font-size: 12px !important; }
+.bet-row .bet-reward{ font-size: 12px !important; margin-top: 2px !important; }
+.bet-controls{
+  margin-top: 8px !important;
+  display: none; /* shown only when winner is selected */
+  gap: 8px !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+}
+.bet-controls .dir-group{ display:flex; gap:8px; align-items:center; }
+.bet-controls .bet-score{ min-width: 77px !important; padding: 8px 10px !important; }
+#bet-ok{
+  width: min(420px, 92vw) !important;
+  padding: 12px 12px !important;
+}
+
+body.bet-open #bet-overlay{
+  opacity: 1;
+  pointer-events: none;
+}
+body.bet-open #bet-modal{
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+#bet-ok:disabled{
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+
+/* ===== Bet Popup Responsive (match other popups) ===== */
+#bet-modal .modal-card{
+  width: min(560px, 100%);
+  text-align: center;
+}
+
+/* Winners list container uses the same card width rules */
+#bet-winners{
+  width: 100%;
+  max-width: 274px;
+  margin: 10px auto 0;
+}
+
+/* Keep rows compact but consistent */
+.bet-row{
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.12);
+}
+
+/* Controls are hidden until selected (JS toggles display) */
+.bet-controls{
+  margin-top: 8px;
+  display: none;
+  gap: 8px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+/* Make score input and toggle behave nicely on small screens */
+.bet-controls .bet-score{
+  width: 67px;
+  min-width: 67px;
+}
+
+/* Small screens: follow the same responsive feel as other popups */
+@media (max-width: 255px){
+  #bet-modal{ padding: 16px; }
+  #bet-modal .modal-card{ padding: 16px 14px 14px; }
+  #bet-modal .trophy-emoji{ font-size: 48px !important; }
+  #bet-modal .modal-title{ font-size: 18px; }
+  #bet-modal .modal-subtitle{ font-size: 12.5px; }
+
+  .bet-row{ padding: 9px 10px; border-radius: 12px; }
+  .bet-row .bet-meta{ font-size: 12px; }
+  .bet-row .bet-reward{ font-size: 12px; }
+
+  .bet-controls{ gap: 6px; }
+  .bet-controls .bet-score{
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* Short height screens: reduce spacing (no scroll, same popup style) */
+@media (max-height: 448px){
+  #bet-modal{ padding: 12px; }
+  #bet-modal .trophy-emoji{ font-size: 42px !important; }
+  #bet-modal .modal-title{ font-size: 17px; }
+  #bet-modal .modal-subtitle{ margin-bottom: 8px; }
+
+  #bet-winners{ margin-top: 8px; }
+  .bet-row{ padding: 8px 10px; margin-bottom: 8px; }
+  .bet-controls{ margin-top: 6px; }
+}
+
+
+/* ===== Training Semi Final text popup ===== */
+body.training-semi-open #training-semi-overlay{
+  opacity: 1;
+  pointer-events: none;
+}
+body.training-semi-open #training-semi-modal{
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+
+/* ===== Lucky Code popup (shows when user clicks PLAY NOW) ===== */
+body.lucky-open #role-overlay{
+  opacity: 1;
+  pointer-events: none; /* locked */
+}
+body.lucky-open #lucky-modal{
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+.lucky-wrap{
+  display:flex;
+  gap:10px;
+  justify-content:center;
+  align-items:center;
+  margin-top: 12px;
+  flex-wrap: nowrap;
+}
+.lucky-box{
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(0,0,0,.22);
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+}
+.lucky-box .lucky-num{
+  position:absolute;
+  top:4px;
+  left:6px;
+  font-size: 10px;
+  font-weight: 900;
+  opacity: .8;
+  color:#fff;
+}
+.lucky-box input{
+  width: 100%;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color:#fff;
+  font-size: 18px;
+  font-weight: 950;
+  text-align:center;
+  text-transform: uppercase;
+  caret-color: transparent;
+}
+#lucky-error{
+  display:none;
+  margin:10px 0 0;
+  padding:10px 12px;
+  border-radius:12px;
+  background: rgba(255,124,124,.12);
+  color:#ffd6d6;
+  font-weight: 900;
+  font-size: 13px;
+  text-align:center;
+}
+@media (max-width: 206px){
+  .lucky-box{ width: 28px; height: 28px; }
+  .lucky-box input{ font-size: 16px; }
+}
+
+    /* Highlight active lucky box (15% bigger, responsive) */
+    .lucky-box{
+      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+      transform-origin: center center;
+    }
+    .lucky-box.lucky-active{
+      transform: scale(1.15);
+      border-color: rgba(255,255,255,0.9) !important;
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.25);
+      z-index: 1;
+    }
+
+/* Social icon labels (clear & relatable) */
+#lucky-modal .lucky-social-icons.labeled{
+  display:flex;
+  justify-content:center;
+  gap:14px;
+  flex-wrap:wrap;
+}
+#lucky-modal .social-item{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:6px;
+}
+#lucky-modal .social-label{
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.2px;
+  opacity:.9;
+  text-transform:capitalize;
+}
+</style>
+
+<!-- ===== Bet Popup Size: responsive & match reference screenshot (20% smaller) ===== -->
+<style>
+/* Responsive bet popup card (mobile + desktop) — 20% smaller */
+#bet-modal{
+  padding: 16px !important;
+}
+
+#bet-modal .modal-card{
+  width: min(480px, 75.2vw) !important; /* 20% reduction from 600px / 94vw */
+  max-width: 75.2vw !important;
+  max-height: 72vh !important;          /* 20% reduction from 90vh */
+  padding: 22px 18px !important;
+  border-radius: 18px !important;
+  box-sizing: border-box !important;
+  overflow-y: auto !important;
+}
+
+/* Keep body behavior unchanged */
+#bet-modal .bet-modal-body{
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+/* Typography unchanged */
+#bet-modal .trophy-emoji{ font-size: 48px !important; }
+#bet-modal .modal-title{ font-size: 24px !important; line-height: 1.15 !important; }
+#bet-modal .modal-subtitle{ font-size: 16px !important; line-height: 1.25 !important; }
+
+/* Winner cards unchanged */
+#bet-modal .top5-title{ font-size: 20px !important; margin-top: 18px !important; }
+#bet-modal .bet-item{ padding: 14px 14px !important; border-radius: 18px !important; }
+#bet-modal .bet-item .rank{ font-size: 26px !important; }
+#bet-modal .bet-item .winner-name{ font-size: 22px !important; }
+#bet-modal .bet-item .desc{ font-size: 13px !important; }
+#bet-modal .bet-item .reward{ font-size: 13px !important; }
+
+/* Submit button unchanged */
+#bet-modal #bet-submit{
+  height: 50px !important;
+  border-radius: 16px !important;
+  font-size: 15px !important;
+}
+
+/* Very short screens: keep within view */
+@media (max-height: 520px){
+  #bet-modal .modal-card{
+    max-height: 70vh !important;
+  }
+}
+</style>
+
+
+<!-- ===== Bet Popup Size Adjustment: Height -20%, Width +20% ===== -->
+<style>
+#bet-modal .modal-card{
+  width: min(120%, 95vw) !important;
+  max-width: 120% !important;
+}
+#bet-modal{
+  max-height: 80vh !important;
+}
+</style>
+
+
+<!-- ===== Top 5 Winner Cards Width +20% ===== -->
+<style>
+#bet-winners .bet-row{
+  width: 120% !important;
+  max-width: 120% !important;
+}
+</style>
+
+
+<!-- ===== Center Winner Cards + Top Text +5% ===== -->
+<style>
+/* Center Top 5 winner cards */
+#bet-winners{
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+}
+#bet-winners .bet-row{
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* Increase top text by 5% */
+#bet-modal .modal-title{
+  font-size: 1.05em !important;
+}
+#bet-modal .modal-subtitle{
+  font-size: 1.05em !important;
+}
+</style>
+
+
+<!-- ===== Perfect Centering of Winner Cards ===== -->
+<style>
+#bet-modal .modal-card{
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+}
+
+#bet-winners{
+  width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+#bet-winners .bet-row{
+  width: 120% !important;
+  max-width: 120% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+</style>
+
+
+<!-- ===== TRUE CENTERING FIX (Grid-based, no ambiguity) ===== -->
+<style>
+/* Center the popup content */
+#bet-modal .modal-card{
+  display: grid !important;
+  place-items: center !important;
+}
+
+/* Center the winners container */
+#bet-winners{
+  display: grid !important;
+  place-items: center !important;
+  width: 100% !important;
+}
+
+/* Center each card visually */
+#bet-winners .bet-row{
+  width: min(120%, 95vw) !important;
+  margin: 0 auto !important;
+}
+</style>
+
+
+<!-- ===== CENTER TOP 5 CARDS WITHOUT RESIZING (keep your widths/heights) ===== -->
+<style>
+/* Keep cards exactly whatever width they already have, but force perfect centering */
+#bet-winners{
+  position: relative !important;
+}
+
+/* If any previous rules set margins/alignments, override to true center */
+#bet-winners .bet-row{
+  /* DO NOT change width/height here */
+  position: relative !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+</style>
+
+
+<!-- ===== FIX: TRUE CENTERING (NO RESIZE) ===== -->
+<style>
+/* Make the winners list a centered flex column (no padding drift) */
+#bet-winners{
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Center each card without changing its width/height */
+#bet-winners .bet-row{
+  position: static !important;
+  left: auto !important;
+  transform: none !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  align-self: center !important;
+}
+</style>
+
+
+<!-- ===== EXACT CENTERING WITHOUT RESIZE (no width/height changes) ===== -->
+<style>
+/* Force exact horizontal centering regardless of container padding */
+#bet-winners .bet-row{
+  margin-left: 50% !important;
+  transform: translateX(-50%) !important;
+}
+</style>
+
+
+<!-- ===== Reduce Round Breakdown Height by 15% ===== -->
+<style>
+#result-round-breakdown{
+  padding: 10px 12px !important; /* ~15% reduction from 12px 14px */
+}
+#result-round-breakdown > div{
+  gap: 6px !important; /* tighter vertical spacing */
+}
+</style>
+
+
+<style>
+.lucky-social-hint{
+  margin-top:12px;
+  text-align:center;
+}
+.lucky-social-text{
+  font-size:12px;
+  opacity:.85;
+  margin-bottom:8px;
+}
+.lucky-social-icons{
+  display:flex;
+  justify-content:center;
+  gap:12px;
+}
+.lucky-social-icons a{
+  width:34px;
+  height:34px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:8px;
+  text-decoration:none;
+  font-size:18px;
+  background:rgba(255,255,255,0.08);
+  border:1px solid rgba(255,255,255,0.15);
+}
+</style>
+
+
+<style>
+#lucky-modal .lucky-social-icons{
+  display:flex;
+  justify-content:center;
+  gap:12px;
+  margin-top:6px;
+}
+#lucky-modal .lucky-social-icons a{
+  width:32px;
+  height:32px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:8px;
+  background:rgba(255,255,255,0.08);
+  border:1px solid rgba(255,255,255,0.15);
+}
+#lucky-modal .lucky-social-icons svg{
+  width:18px;
+  height:18px;
+  fill:#fff;
+}
+</style>
+
+</head>
+<body>
+  <!-- Initial popup flow: Student or Fans (no cancel) -->
+  <div id="role-overlay" class="overlay" aria-hidden="true"></div>
+
+  <div id="role-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="role-title" aria-hidden="true">
+    <div class="modal-card">
+      <div style="text-align:center;margin-bottom:14px;">
+        <div style="font-size:64px;line-height:1;">🏆</div>
+        <h1 style="margin:8px 0 6px;font-size:26px;font-weight:900;">
+          WIN UPTO 20,000 NOW
+        </h1>
+        <p style="margin:0;font-size:14px;opacity:.9;">
+          You will receive upto 20,000 naira alert if you score more than others
+        </p>
+      </div>
+
+      <h2 id="role-title" class="modal-title"></h2>
+      <p class="modal-subtitle"></p>
+
+      <div class="role-grid" style="display:flex;justify-content:center;">
+        <button type="button" id="choose-student" class="role-btn"><span style="display:inline-block;transform:scale(1.5);">PLAY NOW</span></button>
+      </div>
+      <p class="support-text">Please Stake This game with any amount so that winner will win more Click donate to Stake. <button type="button" id="open-support" class="support-link">Donate</button></p>
+    </div>
+  </div>
+
+
+  <!-- Lucky code popup (shown when user clicks PLAY NOW) -->
+  <div id="lucky-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="lucky-title" aria-hidden="true">
+    <div class="modal-card" style="text-align:center;">
+      <div style="font-size:54px;line-height:1;">🎟️</div>
+      <h2 id="lucky-title" class="modal-title" style="margin-top:10px;">Enter Lucky Code</h2>
+      <p class="modal-subtitle" style="margin-top:6px;">Input your 7 lucky code characters to continue.</p>
+      <div class="lucky-social-hint">
+        <p class="lucky-social-text">
+          Click one of the icons below and watch the video that mentions today&#39;s <b>Lucky Code</b>,<br/>
+          or use the button below to continue without a lucky code.
+        </p>
+        
+
+
+      </div>
+
+<div class="lucky-wrap" id="lucky-wrap" aria-label="Lucky code inputs">
+        <div class="lucky-box"><span class="lucky-num">1</span><input class="lucky-in" maxlength="1" inputmode="text" autocomplete="off" /></div>
+        <div class="lucky-box"><span class="lucky-num">2</span><input class="lucky-in" maxlength="1" inputmode="text" autocomplete="off" /></div>
+        <div class="lucky-box"><span class="lucky-num">3</span><input class="lucky-in" maxlength="1" inputmode="text" autocomplete="off" /></div>
+        <div class="lucky-box"><span class="lucky-num">4</span><input class="lucky-in" maxlength="1" inputmode="text" autocomplete="off" /></div>
+        <div class="lucky-box"><span class="lucky-num">5</span><input class="lucky-in" maxlength="1" inputmode="text" autocomplete="off" /></div>
+        <div class="lucky-box"><span class="lucky-num">6</span><input class="lucky-in" maxlength="1" inputmode="text" autocomplete="off" /></div>
+        <div class="lucky-box"><span class="lucky-num">7</span><input class="lucky-in" maxlength="1" inputmode="text" autocomplete="off" /></div>
+      </div>
+
+      <div id="lucky-error">Wrong lucky code. Please try again.</div>
+
+      <button type="button" id="lucky-continue" disabled style="width:70%;margin:14px auto 0;display:block;padding:10px 12px;border-radius:14px;border:1px solid rgba(102,187,106,.55);background:rgba(102,187,106,.18);color:#eafff2;cursor:pointer;font-weight:900;letter-spacing:.2px;text-align:center;">
+        Continue
+      </button>
+
+      <button type="button" id="lucky-skip" style="margin-top:6px;width:100%;padding:8px 10px;border-radius:12px;border:none;outline:none;background:rgba(255,255,255,0.08);color:#fff;font-size:11px;font-weight:700;letter-spacing:.1px;text-align:center;cursor:pointer;">
+        Continue without Lucky Code
+      </button>
+
+<div class="lucky-social-icons labeled">
+  <div class="social-item"><div class="social-label">TikTok</div><a href="#" title="TikTok" aria-label="TikTok">
+    <svg viewBox="0 0 24 24"><path d="M16.5 1c.7 3 2.6 4.9 5.5 5.5v3.2c-2.1.1-4-.6-5.5-1.8V16c0 4-3.3 7-7.3 6.5-2.8-.3-5.1-2.6-5.4-5.4C3.2 12.8 6.7 9 11 9v3.3c-1.6-.3-3.1.9-3.1 2.6 0 1.4 1.1 2.6 2.6 2.6 1.7 0 2.9-1.4 2.9-3V1h3.1z"/></svg>
+  </a></div>
+  <div class="social-item"><div class="social-label">LinkedIn</div><a href="#" title="LinkedIn" aria-label="LinkedIn">
+    <svg viewBox="0 0 24 24"><path d="M4.98 3.5A2.5 2.5 0 1 1 5 8.5a2.5 2.5 0 0 1-.02-5zM3 9h4v12H3zM9 9h3.8v1.7h.1c.5-.9 1.8-1.9 3.7-1.9 4 0 4.7 2.6 4.7 6v6.2h-4v-5.5c0-1.3 0-3-1.9-3s-2.2 1.4-2.2 2.9v5.6H9z"/></svg>
+  </a></div>
+  <div class="social-item"><div class="social-label">Facebook</div><a href="#" title="Facebook" aria-label="Facebook">
+    <svg viewBox="0 0 24 24"><path d="M22 12a10 10 0 1 0-11.5 9.9v-7H8v-3h2.5V9.5c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.4H15c-1.2 0-1.6.8-1.6 1.6V12H18l-.5 3h-3.1v7A10 10 0 0 0 22 12z"/></svg>
+  </a></div>
+  <div class="social-item"><div class="social-label">Instagram</div><a href="#" title="Instagram" aria-label="Instagram">
+    <svg viewBox="0 0 24 24"><path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm5 5a5 5 0 1 0 .001 10.001A5 5 0 0 0 12 7zm6.5-.9a1.1 1.1 0 1 0 .001 2.201A1.1 1.1 0 0 0 18.5 6.1z"/></svg>
+  </a></div>
+  <div class="social-item"><div class="social-label">YouTube</div><a href="#" title="YouTube" aria-label="YouTube">
+    <svg viewBox="0 0 24 24"><path d="M23.5 6.2s-.2-1.7-.9-2.4c-.9-.9-1.9-.9-2.4-1C16.9 2.5 12 2.5 12 2.5h0s-4.9 0-8.2.3c-.5.1-1.5.1-2.4 1-.7.7-.9 2.4-.9 2.4S0 8.1 0 10v1.9c0 1.9.5 3.8.5 3.8s.2 1.7.9 2.4c.9.9 2.1.9 2.6 1 1.9.2 8 .3 8 .3s4.9 0 8.2-.3c.5-.1 1.5-.1 2.4-1 .7-.7.9-2.4.9-2.4s.5-1.9.5-3.8V10c0-1.9-.5-3.8-.5-3.8zM9.8 14.6V7.4l6.2 3.6-6.2 3.6z"/></svg>
+  </a></div>
+  <div class="social-item"><div class="social-label">X</div><a href="#" title="X (Twitter)" aria-label="X">
+    <svg viewBox="0 0 24 24"><path d="M18.9 2H22l-7.6 8.7L23 22h-6.8l-5.3-6.6L5 22H2l8.2-9.4L1 2h7l4.8 6.1L18.9 2z"/></svg>
+  </a></div>
+</div>
+
+      <p class="tiny-note" style="margin-top:10px;">Tip: Each box takes one character.</p>
+    </div>
+  </div>
+
+  <div id="fans-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="fans-title" aria-hidden="true">
+    <div class="modal-card">
+      <h2 id="fans-title" class="modal-title">Fans Form</h2>
+      <p class="modal-subtitle">Fill your details to start.</p>
+
+      <form id="fans-form">
+        <input type="text" id="fans-fullname" name="fans-fullname" placeholder="Full Name" required />
+        <input type="text" id="fans-whatsapp" name="fans-whatsapp" placeholder="WhatsApp Number" required />
+        <input type="email" id="fans-email" name="fans-email" placeholder="Email" required />
+        <select id="fans-gender" name="fans-gender" required>
+          <option value="" disabled selected>Select Gender</option>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+          <option value="Other">Other</option>
+        </select>
+        <button type="submit">Start</button>
+      
+<!-- Social Media Hint -->
+
+</div>
+
+</form>
+    </div>
+  </div>
+
+  <div id="support-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="support-title" aria-hidden="true">
+    <div class="modal-card">
+      <button type="button" class="back-btn" data-back="support-modal">← Back</button>
+
+      <h2 id="support-title" class="modal-title">Support Tokens</h2>
+      <p class="modal-subtitle">Select an amount to support this game.</p>
+
+      <div class="support-list">
+        <button type="button" class="support-item" data-amount="5000">Stake ₦5,000</button>
+        <button type="button" class="support-item" data-amount="6000">Stake ₦6,000</button>
+        <button type="button" class="support-item" data-amount="9000">Stake ₦9,000</button>
+        <button type="button" class="support-item" data-amount="custom">Any amount</button>
+      </div>
+
+      <div id="custom-amount-wrap" style="display:none; margin-top:10px;">
+        <input type="number" id="custom-amount" placeholder="Enter amount" min="1" />
+        <button type="button" id="custom-amount-continue">Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="support-payment-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="pay-title" aria-hidden="true">
+    <div class="modal-card">
+      <button type="button" class="back-btn" data-back="support-payment-modal">← Back</button>
+
+      <h2 id="pay-title" class="modal-title">Support Payment</h2>
+      <p class="modal-subtitle">Pay to the account below and submit proof.</p>
+
+      <div class="pay-box">
+        <div class="pay-row">
+          <div class="pay-label">Account number</div>
+          <div class="pay-value" id="pay-acct">0127011358</div>
+          <button type="button" class="copy-btn" data-copy="pay-acct">Copy</button>
+        </div>
+        <div class="pay-row">
+          <div class="pay-label">Account Name</div>
+          <div class="pay-value" id="pay-name">Magnus innovation enterprise</div>
+          <button type="button" class="copy-btn" data-copy="pay-name">Copy</button>
+        </div>
+        <div class="pay-row">
+          <div class="pay-label">Bank</div>
+          <div class="pay-value" id="pay-bank">WEMA BANK</div>
+          <button type="button" class="copy-btn" data-copy="pay-bank">Copy</button>
+        </div>
+        <div class="pay-row">
+          <div class="pay-label">Amount to pay</div>
+          <div class="pay-value" id="pay-amount">₦0</div>
+          <button type="button" class="copy-btn" data-copy="pay-amount">Copy</button>
+        </div>
+      </div>
+
+      <div class="timer-wrap">
+        <div class="pay-label">Payment duration</div>
+        <div id="pay-timer" class="timer">01:00:00</div>
+      </div>
+
+      <button type="button" id="submit-support-proof">Submit Payment Proof</button>
+      <p class="tiny-note">Tip: Send your proof via WhatsApp/Telegram for faster confirmation.</p>
+    </div>
+  </div><div id="pay-method-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="pm-title" aria-hidden="true">
+    <div class="modal-card">
+      <button type="button" class="back-btn" data-back="pay-method-modal">← Back</button>
+
+      <h2 id="pm-title" class="modal-title">Choose Payment Method</h2>
+      <p class="modal-subtitle">Select how you want to support.</p>
+
+      <div class="support-list">
+        <button type="button" class="pm-item" data-method="opay">Opay</button>
+        <button type="button" class="pm-item" data-method="banks">Other Banks</button>
+        <button type="button" class="pm-item" data-method="foreign">Foreign Payments</button>
+        <button type="button" class="pm-item" data-method="usdt">Cryptocurrency (USDT)</button>
+      </div>
+
+      <p class="tiny-note">Opay and Foreign Payments will redirect to Telegram (Magnus-dashboard.site style).</p>
+    </div>
+  </div>
+
+  <div id="usdt-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="usdt-title" aria-hidden="true">
+    <div class="modal-card">
+      <button type="button" class="back-btn" data-back="usdt-modal">← Back</button>
+
+      <h2 id="usdt-title" class="modal-title">USDT Payment</h2>
+      <p class="modal-subtitle">Send USDT (TRC20) to the wallet below and submit proof.</p>
+
+      <div class="pay-box">
+        <div class="pay-row">
+          <div class="pay-label">Network</div>
+          <div class="pay-value" id="usdt-network">TRC20</div>
+          <button type="button" class="copy-btn" data-copy="usdt-network">Copy</button>
+        </div>
+        <div class="pay-row">
+          <div class="pay-label">Wallet address</div>
+          <div class="pay-value" id="usdt-wallet">TXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX</div>
+          <button type="button" class="copy-btn" data-copy="usdt-wallet">Copy</button>
+        </div>
+        <div class="pay-row">
+          <div class="pay-label">Amount to pay</div>
+          <div class="pay-value" id="usdt-amount">₦0 (convert to USDT)</div>
+          <button type="button" class="copy-btn" data-copy="usdt-amount">Copy</button>
+        </div>
+      </div>
+
+      <button type="button" id="submit-usdt-proof">Submit Payment Proof</button>
+      <p class="tiny-note">Note: Replace the wallet address above with your real USDT wallet.</p>
+    </div>
+  </div>
+<div class="navbar">
+  <div id="score-board">✅ 0 | ❌ 0 <span id="round-label" style="font-weight:600;">Round 1</span></div>
+  <div id="user-info"></div>
+</div>
+<h2 style="padding: 20px 20px 0 20px">Text Recall Game</h2>
+  <!-- Popup form (Magnus-account.site style) -->
+  <div id="form-overlay" class="overlay" aria-hidden="true"></div>
+  <div id="form-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-hidden="true">
+    <div class="modal-card">
+      
+      <h2 id="modal-title" class="modal-title">Start Game</h2>
+      <p class="modal-subtitle">Fill in your details to begin.</p>
+      <form id="game-form" style="padding: 0 20px 20px 20px;">
+  <input type="text" id="fullname" placeholder="Full Name" required><br><br>
+  <select id="gender" required>
+    <option value="">Select Gender</option>
+    <option>Male</option>
+    <option>Female</option>
+    <option>Other</option>
+  </select><br><br>
+  <input type="email" id="email-address" name="email-address" placeholder="Enter Email Address (optional)">
+      <input type="tel" id="whatsapp-number" name="whatsapp-number" placeholder="Enter WhatsApp Number (optional)">
+      <select id="mode" name="mode" required>
+        <option value="" disabled selected>Select Purpose</option>
+        <option value="training">For Training</option>
+        <option value="earning">For Earning</option>
+      </select><br><br>
+  <div id="user-text-wrap" style="display:none;">
+      <textarea id="user-text" rows="6" placeholder="Paste your text here..." style="width: 100%;"></textarea>
+    </div><br><br>
+  <button type="submit">Start Game</button>
+
+<!-- Social Media Hint -->
+
+</div>
+
+</form>
+    </div>
+  </div>
+
+
+<!-- Rules popup (shown immediately after user clicks Start Game) -->
+<div id="rules-overlay" class="overlay" aria-hidden="true"></div>
+<div id="rules-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="rules-title" aria-hidden="true">
+  <div class="modal-card">
+    <div style="text-align:center;margin-bottom:10px;">
+      <div style="font-size:46px;line-height:1;">📜</div>
+      <h2 id="rules-title" class="modal-title" style="margin-top:8px;">Game Rules</h2>
+      <p class="modal-subtitle" style="margin-bottom:0;">Read this before you continue.</p>
+    </div>
+
+    <div style="border-radius:18px;border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.18);padding:12px 14px;line-height:1.45;color:#fff;">
+      <ol style="margin:0;padding-left:18px;display:grid;gap:8px;">
+        <li>Read each paragraph carefully.</li>
+        <li>Click <b>I finished reading</b> to start the blanks, or wait — it will auto-start.</li>
+        <li>Fill the missing words exactly (spelling matters). You can’t edit a word after you submit it.</li>
+        <li>Your score updates instantly: ✅ correct, ❌ wrong.</li>
+        <li>When all paragraphs finish, your result auto-submits to the leaderboard.</li>
+        <li>If you stay too long (timeout), your result will still auto-submit.</li>
+      </ol>
+    </div>
+
+    <button type="button" id="rules-continue" style="width:70%;margin:14px auto 0;display:block;padding:10px 12px;border-radius:14px;border:1px solid rgba(102,187,106,.55);background:rgba(102,187,106,.18);color:#eafff2;cursor:pointer;font-weight:900;letter-spacing:.2px;text-align:center;">
+      I Understand — Continue
+    </button>
+
+    <p class="tiny-note" style="margin-top:10px;">Tip: Focus and type fast — winners are ranked by score.</p>
+  </div>
+</div>
+
+
+<!-- Result popup (shown immediately when the game ends) -->
+<div id="result-overlay" class="overlay" aria-hidden="true"></div>
+<div id="result-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="result-title" aria-hidden="true">
+  <div class="modal-card">
+    
+<div style="text-align:center;margin-bottom:14px;">
+  <div style="font-size:64px;line-height:1;">🏆</div>
+  <h1 style="margin:8px 0 6px;font-size:26px;font-weight:900;">
+    WIN UPTO 20,000 NOW
+  </h1>
+  <p style="margin:0;font-size:14px;opacity:.9;">
+    
+  </p>
+</div>
+
+<h2 id="result-title" class="modal-title">Game Result</h2>
+<p class="modal-subtitle" style="margin-bottom:0;" id="result-subtitle">Your score has been recorded.</p>
+
+      
+      
+    </div>
+
+    <div style="display:grid;gap:10px;">
+      <div style="border-radius:18px;border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.18);padding:12px 14px;color:#fff;">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
+          <span style="opacity:.85;font-weight:800;">Correct</span>
+          <span id="result-correct" style="font-weight:950;font-size:20px;">0</span>
+        </div>
+        <div style="height:6px;"></div>
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
+          <span style="opacity:.85;font-weight:800;">Wrong</span>
+          <span id="result-wrong" style="font-weight:950;font-size:20px;">0</span>
+        </div>
+        <div style="height:6px;"></div>
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
+          <span style="opacity:.85;font-weight:800;">Total Questions</span>
+          <span id="result-total" style="font-weight:950;font-size:20px;">0</span>
+        </div>
+      </div>
+
+      
+      <!-- Round breakdown (shown after Round 2) -->
+      <div id="result-round-breakdown" style="display:none;border-radius:18px;border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.18);padding:12px 14px;color:#fff;">
+        <div style="font-weight:950;opacity:.9;margin-bottom:8px;text-align:center;">Round Breakdown</div>
+
+        <div style="display:grid;gap:8px;">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
+            <span style="opacity:.85;font-weight:800;">Round 1 (Correct / Wrong)</span>
+            <span style="font-weight:950;" id="r1-line">0 / 0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
+            <span style="opacity:.85;font-weight:800;">Round 2 (Correct / Wrong)</span>
+            <span style="font-weight:950;" id="r2-line">0 / 0</span>
+          </div>
+          <div style="height:1px;background:rgba(255,255,255,.10);"></div>
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
+            <span style="opacity:.85;font-weight:900;">Total Score (All Rounds)</span>
+            <span style="font-weight:950;" id="all-line">0 / 0</span>
+          </div>
+        </div>
+      </div>
+
+<div style="border-radius:18px;border:1px solid rgba(102,187,106,.35);background:rgba(102,187,106,.10);padding:12px 14px;color:#eafff2;text-align:center;">
+        <div style="font-weight:950;font-size:18px;">
+          Score: <span id="result-scoreline">0 / 0</span>
+        </div>
+        <div style="opacity:.85;margin-top:6px;font-weight:700;" id="result-name-line"></div>
+        <div id="result-qualification" style="margin-top:10px;font-weight:900;text-align:center;"></div>
+      </div>
+    </div>
+
+    <button type="button" id="result-ok" onclick="
+(function(){
+  try{
+    var sel = document.getElementById('mode');
+    var mode = sel && sel.value ? String(sel.value).toLowerCase() : '';
+    if (mode === 'training'){
+      window.location.href = 'https://t.me/Trgolive';
+    } else {
+      window.location.href = 'https://t.me/betgolive';
+    }
+  }catch(e){
+    window.location.href = 'https://t.me/betgolive';
+  }
+})()
+"
+ style="width:70%;margin:14px auto 0;display:block;padding:10px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.10);color:#fff;cursor:pointer;font-weight:900;letter-spacing:.2px;text-align:center;">Go Live Now</button>
+
+    <p class="tiny-note" style="margin-top:10px;">Tip: Play again and try to rank higher.</p>
+  </div>
+</div>
+
+
+<!-- Countdown popup (shown after Round 1 qualification) -->
+<div id="countdown-overlay" class="overlay" aria-hidden="true"></div>
+<div id="countdown-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="countdown-title" aria-hidden="true">
+  <div class="modal-card" style="text-align:center;">
+    <div style="font-size:54px;line-height:1;">⏳</div>
+    <h2 id="countdown-title" class="modal-title" style="margin-top:10px;">Semi Final starts in</h2>
+    <div id="countdown-number" style="margin-top:10px;font-size:64px;font-weight:1000;letter-spacing:2px;">3</div>
+    <p class="modal-subtitle" style="margin-top:10px;">Get ready…</p>
+  </div>
+</div>
+
+
+<!-- Training: Semi Final requires 2× longer text -->
+<div id="training-semi-overlay" class="overlay" aria-hidden="true"></div>
+<div id="training-semi-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="training-semi-title" aria-hidden="true">
+  <div class="modal-card">
+    <div style="text-align:center;margin-bottom:14px;">
+      <div style="font-size:54px;line-height:1;">📝</div>
+      <h2 id="training-semi-title" class="modal-title" style="margin-top:10px;">Semi Final (Training)</h2>
+      <p class="modal-subtitle" style="margin-bottom:0;">Paste a text that is <b>2× longer</b> than your Round 1 text.</p>
+    </div>
+
+    <label style="display:block;font-weight:800;margin-bottom:8px;">Your Semi Final text</label>
+    <textarea id="training-semi-text" placeholder="Paste 2× longer text here..." style="width:100%;min-height:98px;border-radius:14px;border:1px solid rgba(255,255,255,.16);background:rgba(0,0,0,.20);color:#fff;outline:none;padding:12px 12px;resize:vertical;"></textarea>
+
+    <div id="training-semi-hint" class="tiny-note" style="margin-top:10px;opacity:.9;"></div>
+
+    <button type="button" id="training-semi-start" style="width:100%;margin-top:12px;padding:12px 14px;border-radius:14px;border:1px solid rgba(102,187,106,.55);background:rgba(102,187,106,.18);color:#eafff2;cursor:pointer;font-weight:900;letter-spacing:.2px;text-align:center;">
+      Start Semi Final
+    </button>
+  </div>
+</div>
+
+<!-- Top 5 Winners – Place Your Bet popup (shown when user fails before Round 2 or Go Live) -->
+<div id="bet-overlay" class="overlay" aria-hidden="true"></div>
+<div id="bet-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="bet-title" aria-hidden="true">
+  <div class="modal-card" style="text-align:center;">
+    <div class="trophy-emoji" style="font-size:58px;line-height:1;">🏆</div>
+    <h2 id="bet-title" class="modal-title" style="margin-top:10px;">Top 5 Winners – Place Your Bet</h2>
+    <p class="modal-subtitle" style="margin-top:8px;">
+      You didn’t qualify for the next stage. Place your bet on the Top 5 winners now.
+    </p>
+
+    <div id="bet-winners" style="margin:10px auto 0; text-align:left; width:100%; max-width:274px;">
+  <div class="bet-header" style="font-weight:900; margin-bottom:10px; letter-spacing:.2px;">Top 5 Winners (ranked)</div>
+
+  <!-- Winner rows: select one or multiple, then choose Above/Below + score for each selected -->
+  <div class="bet-row" data-rank="1" style="padding:12px;border-radius:14px;background:rgba(255,255,255,.06); margin-bottom:10px;">
+    <label style="display:flex; gap:10px; align-items:flex-start; cursor:pointer;">
+      <input class="bet-choice" type="checkbox" name="bet-winner" value="1st" data-rank="1" style="margin-top:2px; transform:scale(1.15);" />
+      <div>
+        <div style="font-weight:900;">1st — Winner 1</div>
+        <div class="bet-meta" style="font-size:12px; opacity:.85;">Best overall score</div>
+        <div class="bet-reward" style="font-size:12px; opacity:.95; margin-top:2px; font-weight:900;">Reward: ₦1,000 if correct</div>
+      </div>
+    </label>
+
+    <div class="bet-controls" aria-hidden="true" style="margin-top:10px; display:none; gap:10px; flex-wrap:wrap; align-items:center; opacity:.55;">
+      <div class="dir-group" style="display:flex; gap:10px; align-items:center;">
+        <label style="display:flex; gap:6px; align-items:center; cursor:pointer; font-size:12px; font-weight:900;">
+          <input class="bet-dir" type="radio" name="bet-dir-1" value="Above" disabled />
+          Above
+        </label>
+        <label style="display:flex; gap:6px; align-items:center; cursor:pointer; font-size:12px; font-weight:900;">
+          <input class="bet-dir" type="radio" name="bet-dir-1" value="Below" disabled />
+          Below
+        </label>
+      </div>
+
+      <input class="bet-score" type="number" min="0" step="1" inputmode="numeric" placeholder="Input score" disabled
+        style="flex:1; min-width:105px; padding:10px 12px; border-radius:12px; border:1px solid rgba(255,255,255,.18); background:rgba(0,0,0,.25); color:#fff; outline:none;" />
+    </div>
+  </div>
+
+  <div class="bet-row" data-rank="2" style="padding:12px;border-radius:14px;background:rgba(255,255,255,.06); margin-bottom:10px;">
+    <label style="display:flex; gap:10px; align-items:flex-start; cursor:pointer;">
+      <input class="bet-choice" type="checkbox" name="bet-winner" value="2nd" data-rank="2" style="margin-top:2px; transform:scale(1.15);" />
+      <div>
+        <div style="font-weight:900;">2nd — Winner 2</div>
+        <div class="bet-meta" style="font-size:12px; opacity:.85;">Strong contender</div>
+        <div class="bet-reward" style="font-size:12px; opacity:.95; margin-top:2px; font-weight:900;">Reward: ₦2,000 if correct</div>
+      </div>
+    </label>
+
+    <div class="bet-controls" aria-hidden="true" style="margin-top:10px; display:none; gap:10px; flex-wrap:wrap; align-items:center; opacity:.55;">
+      <div class="dir-group" style="display:flex; gap:10px; align-items:center;">
+        <label style="display:flex; gap:6px; align-items:center; cursor:pointer; font-size:12px; font-weight:900;">
+          <input class="bet-dir" type="radio" name="bet-dir-2" value="Above" disabled />
+          Above
+        </label>
+        <label style="display:flex; gap:6px; align-items:center; cursor:pointer; font-size:12px; font-weight:900;">
+          <input class="bet-dir" type="radio" name="bet-dir-2" value="Below" disabled />
+          Below
+        </label>
+      </div>
+
+      <input class="bet-score" type="number" min="0" step="1" inputmode="numeric" placeholder="Input score" disabled
+        style="flex:1; min-width:105px; padding:10px 12px; border-radius:12px; border:1px solid rgba(255,255,255,.18); background:rgba(0,0,0,.25); color:#fff; outline:none;" />
+    </div>
+  </div>
+
+  <div class="bet-row" data-rank="3" style="padding:12px;border-radius:14px;background:rgba(255,255,255,.06); margin-bottom:10px;">
+    <label style="display:flex; gap:10px; align-items:flex-start; cursor:pointer;">
+      <input class="bet-choice" type="checkbox" name="bet-winner" value="3rd" data-rank="3" style="margin-top:2px; transform:scale(1.15);" />
+      <div>
+        <div style="font-weight:900;">3rd — Winner 3</div>
+        <div class="bet-meta" style="font-size:12px; opacity:.85;">Consistent performer</div>
+        <div class="bet-reward" style="font-size:12px; opacity:.95; margin-top:2px; font-weight:900;">Reward: ₦2,000 if correct</div>
+      </div>
+    </label>
+
+    <div class="bet-controls" aria-hidden="true" style="margin-top:10px; display:none; gap:10px; flex-wrap:wrap; align-items:center; opacity:.55;">
+      <div class="dir-group" style="display:flex; gap:10px; align-items:center;">
+        <label style="display:flex; gap:6px; align-items:center; cursor:pointer; font-size:12px; font-weight:900;">
+          <input class="bet-dir" type="radio" name="bet-dir-3" value="Above" disabled />
+          Above
+        </label>
+        <label style="display:flex; gap:6px; align-items:center; cursor:pointer; font-size:12px; font-weight:900;">
+          <input class="bet-dir" type="radio" name="bet-dir-3" value="Below" disabled />
+          Below
+        </label>
+      </div>
+
+      <input class="bet-score" type="number" min="0" step="1" inputmode="numeric" placeholder="Input score" disabled
+        style="flex:1; min-width:105px; padding:10px 12px; border-radius:12px; border:1px solid rgba(255,255,255,.18); background:rgba(0,0,0,.25); color:#fff; outline:none;" />
+    </div>
+  </div>
+
+  <div class="bet-row" data-rank="4" style="padding:12px;border-radius:14px;background:rgba(255,255,255,.06); margin-bottom:10px;">
+    <label style="display:flex; gap:10px; align-items:flex-start; cursor:pointer;">
+      <input class="bet-choice" type="checkbox" name="bet-winner" value="4th" data-rank="4" style="margin-top:2px; transform:scale(1.15);" />
+      <div>
+        <div style="font-weight:900;">4th — Winner 4</div>
+        <div class="bet-meta" style="font-size:12px; opacity:.85;">Underdog pick</div>
+        <div class="bet-reward" style="font-size:12px; opacity:.95; margin-top:2px; font-weight:900;">Reward: ₦2,000 if correct</div>
+      </div>
+    </label>
+
+    <div class="bet-controls" aria-hidden="true" style="margin-top:10px; display:none; gap:10px; flex-wrap:wrap; align-items:center; opacity:.55;">
+      <div class="dir-group" style="display:flex; gap:10px; align-items:center;">
+        <label style="display:flex; gap:6px; align-items:center; cursor:pointer; font-size:12px; font-weight:900;">
+          <input class="bet-dir" type="radio" name="bet-dir-4" value="Above" disabled />
+          Above
+        </label>
+        <label style="display:flex; gap:6px; align-items:center; cursor:pointer; font-size:12px; font-weight:900;">
+          <input class="bet-dir" type="radio" name="bet-dir-4" value="Below" disabled />
+          Below
+        </label>
+      </div>
+
+      <input class="bet-score" type="number" min="0" step="1" inputmode="numeric" placeholder="Input score" disabled
+        style="flex:1; min-width:105px; padding:10px 12px; border-radius:12px; border:1px solid rgba(255,255,255,.18); background:rgba(0,0,0,.25); color:#fff; outline:none;" />
+    </div>
+  </div>
+
+  <div class="bet-row" data-rank="5" style="padding:12px;border-radius:14px;background:rgba(255,255,255,.06); margin-bottom:10px;">
+    <label style="display:flex; gap:10px; align-items:flex-start; cursor:pointer;">
+      <input class="bet-choice" type="checkbox" name="bet-winner" value="5th" data-rank="5" style="margin-top:2px; transform:scale(1.15);" />
+      <div>
+        <div style="font-weight:900;">5th — Winner 5</div>
+        <div class="bet-meta" style="font-size:12px; opacity:.85;">Wildcard pick</div>
+        <div class="bet-reward" style="font-size:12px; opacity:.95; margin-top:2px; font-weight:900;">Reward: ₦2,000 if correct</div>
+      </div>
+    </label>
+
+    <div class="bet-controls" aria-hidden="true" style="margin-top:10px; display:none; gap:10px; flex-wrap:wrap; align-items:center; opacity:.55;">
+      <div class="dir-group" style="display:flex; gap:10px; align-items:center;">
+        <label style="display:flex; gap:6px; align-items:center; cursor:pointer; font-size:12px; font-weight:900;">
+          <input class="bet-dir" type="radio" name="bet-dir-5" value="Above" disabled />
+          Above
+        </label>
+        <label style="display:flex; gap:6px; align-items:center; cursor:pointer; font-size:12px; font-weight:900;">
+          <input class="bet-dir" type="radio" name="bet-dir-5" value="Below" disabled />
+          Below
+        </label>
+      </div>
+
+      <input class="bet-score" type="number" min="0" step="1" inputmode="numeric" placeholder="Input score" disabled
+        style="flex:1; min-width:105px; padding:10px 12px; border-radius:12px; border:1px solid rgba(255,255,255,.18); background:rgba(0,0,0,.25); color:#fff; outline:none;" />
+    </div>
+  </div>
+
+  <div id="bet-error" style="display:none; margin:10px 0 0; padding:10px 12px; border-radius:12px; background:rgba(255,124,124,.12); color:#ffd6d6; font-weight:900; font-size:13px;">
+    Select at least ONE winner, and for each selected winner choose Above/Below and enter a score.
+  </div>
+</div>
+
+<button type="button" id="bet-ok" disabled style="width:70%;margin:14px auto 0;display:block;padding:10px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.10);color:#fff;cursor:pointer;font-weight:900;letter-spacing:.2px;text-align:center;">
+      Submit Bet
+    </button>
+
+    <p class="tiny-note" style="margin-top:10px;">
+      Tip: Betting details can be shown on your Telegram channel or website page.
+    </p>
+  </div>
+</div>
+
+<div id="game-area"></div>
+></div>
+<div id="results"></div>
+<script>
+  // =========================
+  // Text Recall Game (Refactored Structure)
+  // NOTE: Logic/behavior preserved. Only reorganized for readability.
+  // =========================
+
+  // ---- DOM refs ----
+  const form = document.getElementById('game-form');
+  const userInfo = document.getElementById('user-info');
+  const gameArea = document.getElementById('game-area');
+  const results = document.getElementById('results');
+  const scoreBoard = document.getElementById('score-board');
+
+      const modeSelect = document.getElementById('mode');
+  const userTextWrap = document.getElementById('user-text-wrap');
+  const userTextArea = document.getElementById('user-text');
+// ---- Popup form controls (Magnus-like) ----
+  const formOverlay = document.getElementById('form-overlay');
+  const formModal = document.getElementById('form-modal');
+  const modalCloseBtn = document.getElementById('modal-close');
+
+
+  // ---- Rules popup controls ----
+  const rulesOverlay = document.getElementById('rules-overlay');
+  const rulesModal = document.getElementById('rules-modal');
+  const rulesContinueBtn = document.getElementById('rules-continue');
+
+  // ---- Result popup controls ----
+  const resultOverlay = document.getElementById('result-overlay');
+  const resultModal = document.getElementById('result-modal');
+  const resultOkBtn = document.getElementById('result-ok');
+  const resultNextBtn = document.getElementById('result-next');
+  const resultCorrectEl = document.getElementById('result-correct');
+  const resultWrongEl = document.getElementById('result-wrong');
+  const resultTotalEl = document.getElementById('result-total');
+  const resultScorelineEl = document.getElementById('result-scoreline');
+  const resultNameLineEl = document.getElementById('result-name-line');
+  const resultQualificationEl = document.getElementById('result-qualification');
+  const resultSubtitleEl = document.getElementById('result-subtitle');
+  const countdownOverlay = document.getElementById('countdown-overlay');
+  const countdownModal = document.getElementById('countdown-modal');
+  const countdownNumberEl = document.getElementById('countdown-number');
+  const trainingSemiOverlay = document.getElementById('training-semi-overlay');
+  const trainingSemiModal = document.getElementById('training-semi-modal');
+  const trainingSemiTextEl = document.getElementById('training-semi-text');
+  const trainingSemiStartBtn = document.getElementById('training-semi-start');
+  
+const trainingSemiHintEl = document.getElementById('training-semi-hint');
+
+// ---- Bet popup controls ----
+const betOverlay = document.getElementById('bet-overlay');
+const betModal = document.getElementById('bet-modal');
+const betOkBtn = document.getElementById('bet-ok');
+const betChoices = Array.from(document.querySelectorAll('.bet-choice'));
+const betErrorEl = document.getElementById('bet-error');
+let betSelections = [];
+
+function syncBetSubmitState() {
+  // Hide error while user edits
+  if (betErrorEl) betErrorEl.style.display = 'none';
+
+  // Enable/disable per-row controls based on selection
+  const rows = Array.from(document.querySelectorAll('.bet-row'));
+  rows.forEach((row) => {
+    const chk = row.querySelector('.bet-choice');
+    const controls = row.querySelector('.bet-controls');
+    const radios = Array.from(row.querySelectorAll('.bet-dir'));
+    const score = row.querySelector('.bet-score');
+
+    const enabled = !!(chk && chk.checked);
+
+    radios.forEach((r) => { r.disabled = !enabled; if (!enabled) r.checked = false; });
+    if (score) { score.disabled = !enabled; if (!enabled) score.value = ''; }
+
+    if (controls) {
+      controls.style.opacity = enabled ? '1' : '.55';
+      controls.style.display = enabled ? 'flex' : 'none';
+      controls.setAttribute('aria-hidden', enabled ? 'false' : 'true');
+    }
+  });
+
+  // Validation: must pick at least one winner AND complete Above/Below + score for each selected winner
+  const checked = betChoices.filter((c) => c && c.checked);
+  const anyChecked = checked.length > 0;
+
+  let allComplete = true;
+  checked.forEach((c) => {
+    const row = c.closest('.bet-row');
+    if (!row) { allComplete = false; return; }
+
+    const dirPicked = !!row.querySelector('.bet-dir:checked');
+    const scoreEl = row.querySelector('.bet-score');
+    const scoreVal = scoreEl ? scoreEl.value.trim() : '';
+    const scoreOk = scoreVal !== '' && !Number.isNaN(Number(scoreVal));
+
+    if (!dirPicked || !scoreOk) allComplete = false;
+  });
+
+  const valid = anyChecked && allComplete;
+  if (betOkBtn) betOkBtn.disabled = !valid;
+}
+
+
+betChoices.forEach((c) => {
+  c.addEventListener('change', syncBetSubmitState);
+});
+
+// Re-validate when user sets Above/Below or types score
+Array.from(document.querySelectorAll('.bet-dir')).forEach((r) => {
+  r.addEventListener('change', syncBetSubmitState);
+});
+Array.from(document.querySelectorAll('.bet-score')).forEach((s) => {
+  s.addEventListener('input', syncBetSubmitState);
+  s.addEventListener('change', syncBetSubmitState);
+});
+
+// ---- Anti-copy / anti-leave (best-effort) ----
+let gameActive = false;
+
+// ---- Stage system (exact order) ----
+const STAGES = ['Round 1', 'Round 2 (Semi Final)', 'Go Live (Final stage)'];
+let stageIndex = 0; // Round 1 starts first
+
+// ---- Round 1 baseline (used to make Semi Final 2× longer) ----
+let round1ParagraphCount = 0;
+  let round1CardCount = 0; // number of question cards in Round 1
+let round1TargetBlanks = 0;
+let round1TrainingWordCount = 0;
+
+
+
+function getStageName() {
+  return STAGES[stageIndex] || STAGES[0];
+}
+
+function applyStageDifficulty() {
+  // Best-effort difficulty scaling (does not change core logic)
+  if (stageIndex === 0) targetBlanks = Math.max(10, targetBlanks);
+  if (stageIndex === 1) targetBlanks = Math.max(15, targetBlanks);
+  if (stageIndex === 2) targetBlanks = Math.max(20, targetBlanks);
+}
+
+
+
+function setGameActive(isActive) {
+  gameActive = !!isActive;
+  document.body.classList.toggle('game-active', gameActive);
+}
+
+document.addEventListener('copy', (e) => { if (gameActive) e.preventDefault(); });
+document.addEventListener('cut', (e) => { if (gameActive) e.preventDefault(); });
+document.addEventListener('contextmenu', (e) => { if (gameActive) e.preventDefault(); });
+
+document.addEventListener('keydown', (e) => {
+  if (!gameActive) return;
+
+  const k = (e.key || '').toLowerCase();
+  const ctrl = e.ctrlKey || e.metaKey;
+
+  if (k === 'printscreen') { e.preventDefault(); return; }
+  if (ctrl && ['c','x','s','p','u','a'].includes(k)) { e.preventDefault(); return; }
+
+  if (e.key === 'F12') { e.preventDefault(); return; }
+  if (ctrl && e.shiftKey && ['i','j','c'].includes(k)) { e.preventDefault(); return; }
+}, { capture: true });
+
+window.addEventListener('beforeunload', (e) => {
+  if (!gameActive) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+
+try {
+  history.pushState({ locked: true }, '', location.href);
+  window.addEventListener('popstate', () => {
+    if (!gameActive) return;
+    history.pushState({ locked: true }, '', location.href);
+  });
+} catch (err) {}
+
+document.addEventListener('visibilitychange', () => {
+  if (!gameActive) return;
+  if (document.visibilityState === 'hidden') {
+    endGame('left');
+  }
+
+
+// Start Semi Final after training user pastes 2× longer text
+
+
+});
+
+
+
+  function openFormModal() {
+    clearEntryModals();
+    roleOverlay.setAttribute('aria-hidden', 'true');
+    document.body.classList.add('modal-open');
+    formOverlay.setAttribute('aria-hidden', 'false');
+    formModal.setAttribute('aria-hidden', 'false');
+    const first = form.querySelector('input, select, textarea, button');
+    if (first) setTimeout(() => first.focus(), 0);
+  }
+
+  function closeFormModal() {
+    document.body.classList.remove('modal-open');
+    formOverlay.setAttribute('aria-hidden', 'true');
+    formModal.setAttribute('aria-hidden', 'true');
+  }
+
+  // Rules popup
+  let rulesAccepted = false;
+  let rulesOnContinue = null;
+
+  function openRulesModal(onContinue) {
+    // Hide the form modal immediately so user can read clearly
+    closeFormModal();
+    if (typeof clearEntryModals === 'function') clearEntryModals();
+    rulesOnContinue = (typeof onContinue === 'function') ? onContinue : null;
+    document.body.classList.add('rules-open');
+    if (rulesOverlay) rulesOverlay.setAttribute('aria-hidden', 'false');
+    if (rulesModal) rulesModal.setAttribute('aria-hidden', 'false');
+    if (rulesContinueBtn) setTimeout(() => rulesContinueBtn.focus(), 0);
+  }
+
+  function closeRulesModal() {
+    document.body.classList.remove('rules-open');
+    if (rulesOverlay) rulesOverlay.setAttribute('aria-hidden', 'true');
+    if (rulesModal) rulesModal.setAttribute('aria-hidden', 'true');
+  }
+
+
+
+function openResultModal({ correct, wrong, total, nameLine = '', subtitle = '' }) {
+  document.body.classList.add('result-open');
+  if (resultOverlay) resultOverlay.setAttribute('aria-hidden', 'false');
+  if (resultModal) resultModal.setAttribute('aria-hidden', 'false');
+
+  if (resultCorrectEl) resultCorrectEl.textContent = String(correct ?? 0);
+  if (resultWrongEl) resultWrongEl.textContent = String(wrong ?? 0);
+  if (resultTotalEl) resultTotalEl.textContent = String(total ?? 0);
+  if (resultScorelineEl) resultScorelineEl.textContent = `${correct ?? 0} / ${total ?? 0}`;
+  if (resultNameLineEl) resultNameLineEl.textContent = nameLine || '';
+  
+  // ===== Store per-round stats for Round 2 summary =====
+  window.__roundStats = window.__roundStats || {};
+  if (typeof stageIndex !== 'undefined') {
+    if (stageIndex === 0) {
+      window.__roundStats.r1 = { correct: (correct ?? 0), wrong: (wrong ?? 0), total: (total ?? 0) };
+    }
+    if (stageIndex === 1) {
+      window.__roundStats.r2 = { correct: (correct ?? 0), wrong: (wrong ?? 0), total: (total ?? 0) };
+    }
+  }
+
+  // Hide breakdown by default; it will show only after Round 2
+  const breakdownBox = document.getElementById('result-round-breakdown');
+  if (breakdownBox) breakdownBox.style.display = 'none';
+
+  
+if (resultSubtitleEl && subtitle) resultSubtitleEl.textContent = subtitle;
+
+// ===== QUALIFICATION CHECK (Round 1 only) =====
+if (typeof stageIndex !== 'undefined' && stageIndex === 0) {
+  const percent = total > 0 ? Math.round((correct / total) * 100) : 0;
+
+  if (percent > 50) {
+    if (resultQualificationEl) {
+      resultQualificationEl.textContent = '✅ You are qualified for Semi Final';
+      resultQualificationEl.style.color = '#7CFF9B';
+    }
+    // allow next stage
+    if (resultNextBtn) resultNextBtn.style.display = 'inline-block';
+
+        // Auto proceed with countdown, then start Semi Final
+        setTimeout(() => {
+          closeResultModal();
+          startCountdownToSemiFinal();
+        }, 700);
+  } else {
+    if (resultQualificationEl) {
+      resultQualificationEl.textContent = '❌ You are not qualified. Try again';
+      setTimeout(() => { closeResultModal(); openBetModal(); }, 650);
+      resultQualificationEl.style.color = '#FF7C7C';
+    }
+    // stop progression
+    if (resultNextBtn) resultNextBtn.style.display = 'none';
+  }
+}
+
+
+// ===== QUALIFICATION CHECK (Round 2 -> Go Live) =====
+if (typeof stageIndex !== 'undefined' && stageIndex === 1) {
+  const percent = total > 0 ? Math.round((correct / total) * 100) : 0;
+
+  // ===== Show Round 1 + Round 2 + Overall totals after Round 2 =====
+  const r1 = (window.__roundStats && window.__roundStats.r1) ? window.__roundStats.r1 : { correct: 0, wrong: 0, total: 0 };
+  const r2 = { correct: (correct ?? 0), wrong: (wrong ?? 0), total: (total ?? 0) };
+
+  const allCorrect = (r1.correct || 0) + (r2.correct || 0);
+  const allWrong   = (r1.wrong   || 0) + (r2.wrong   || 0);
+  const allTotal   = (r1.total   || 0) + (r2.total   || 0);
+
+  const r1Line = document.getElementById('r1-line');
+  const r2Line = document.getElementById('r2-line');
+  const allLine = document.getElementById('all-line');
+  const breakdownBox2 = document.getElementById('result-round-breakdown');
+
+  if (r1Line) r1Line.textContent = `${r1.correct || 0} / ${r1.wrong || 0}`;
+  if (r2Line) r2Line.textContent = `${r2.correct || 0} / ${r2.wrong || 0}`;
+  if (allLine) allLine.textContent = `${allCorrect} / ${allTotal}`;
+
+  if (breakdownBox2) breakdownBox2.style.display = 'block';
+
+
+  // Hide any "next" button in Round 2
+  if (resultNextBtn) resultNextBtn.style.display = 'none';
+
+  if (percent >= 70) {
+    if (resultQualificationEl) {
+      resultQualificationEl.textContent = '🎥 You are qualified for Go Live';
+      resultQualificationEl.style.color = '#7CFF9B';
+    }
+    // Show Go Live notification
+    setTimeout(() => {
+      if (typeof showGoLiveNotification === 'function') showGoLiveNotification();
+    }, 150);
+  } else {
+    if (resultQualificationEl) {
+      resultQualificationEl.textContent = '❌ You are not qualified for Go Live';
+      resultQualificationEl.style.color = '#FF7C7C';
+    }
+    // Failed before Go Live -> show betting popup
+    setTimeout(() => {
+      if (typeof openBetModal === 'function') openBetModal();
+    }, 150);
+  }
+}
+
+
+
+
+function openBetModal() {
+  // Ensure other popups are closed
+  try { closeRulesModal(); } catch(e) {}
+  try { closeResultModal(); } catch(e) {}
+
+  // Reset selections every time this opens
+  betSelections = [];
+  betChoices.forEach((c) => { c.checked = false; });
+  if (betErrorEl) betErrorEl.style.display = 'none';
+  if (betOkBtn) betOkBtn.disabled = true;
+
+  try { syncBetSubmitState(); } catch(e) {}
+
+  document.body.classList.add('bet-open');
+  if (betOverlay) betOverlay.setAttribute('aria-hidden', 'false');
+  if (betModal) betModal.setAttribute('aria-hidden', 'false');
+
+  setTimeout(() => {
+    const firstChoice = betChoices[0];
+    if (firstChoice) firstChoice.focus();
+  }, 0);
+}
+
+function closeBetModal() {
+  document.body.classList.remove('bet-open');
+  if (betOverlay) betOverlay.setAttribute('aria-hidden', 'true');
+  if (betModal) betModal.setAttribute('aria-hidden', 'true');
+}
+
+if (betOkBtn) {
+  betOkBtn.addEventListener('click', () => {
+    // Build bet selections: allow one or multiple winners
+    const checked = betChoices.filter((c) => c && c.checked);
+
+    // Must bet on at least ONE winner
+    if (!checked.length) {
+      if (betErrorEl) betErrorEl.style.display = 'block';
+      if (betOkBtn) betOkBtn.disabled = true;
+      return;
+    }
+
+    // Each selected winner must have Above/Below + score
+    const built = [];
+    let invalid = false;
+
+    checked.forEach((c) => {
+      const row = c.closest('.bet-row');
+      if (!row) { invalid = true; return; }
+
+      const dirEl = row.querySelector('.bet-dir:checked');
+      const scoreEl = row.querySelector('.bet-score');
+
+      const direction = dirEl ? dirEl.value : '';
+      const scoreRaw = scoreEl ? scoreEl.value.trim() : '';
+      const scoreNum = Number(scoreRaw);
+
+      if (!direction || scoreRaw === '' || Number.isNaN(scoreNum)) {
+        invalid = true;
+        return;
+      }
+
+      built.push({
+        rank: c.value,
+        winner: row.querySelector('div[style*="font-weight:900"]')?.textContent?.trim() || c.value,
+        direction,
+        score: scoreNum
+      });
+    });
+
+    if (invalid || !built.length) {
+      if (betErrorEl) betErrorEl.style.display = 'block';
+      if (betOkBtn) betOkBtn.disabled = true;
+      return;
+    }
+
+    betSelections = built;
+
+    // Save bets (persist)
+    try {
+      const payload = {
+        createdAt: new Date().toISOString(),
+        stage: (typeof currentStage !== 'undefined') ? currentStage : '',
+        bets: betSelections
+      };
+      const key = 'ubceo_saved_bets_v1';
+      const prev = JSON.parse(localStorage.getItem(key) || '[]');
+      prev.push(payload);
+      localStorage.setItem(key, JSON.stringify(prev));
+      window.__UBCEO_SAVED_BETS__ = payload;
+    } catch(e) {}
+
+    closeBetModal();
+
+    // After a valid bet, open payment options with discount based on lucky code.
+    // Base stake is ₦10,000. Each correctly matched lucky character reduces payment by 10%.
+    // If user did not use lucky code, amount stays ₦10,000.
+    let baseAmount = 10000;
+    let finalAmount = baseAmount;
+
+    try {
+      const matches = (typeof window !== 'undefined' && typeof window.__UBCEO_LUCKY_MATCHES__ === 'number')
+        ? window.__UBCEO_LUCKY_MATCHES__
+        : 0;
+
+      if (matches > 0) {
+        const steps = Math.max(0, Math.min(matches, 7)); // cap between 0 and 7
+        const discountFactor = 1 - 0.10 * steps;
+        finalAmount = Math.max(Math.round(baseAmount * discountFactor), 0);
+      }
+    } catch (e) {
+      finalAmount = baseAmount;
+    }
+
+    try {
+      // Stake flow: mark context as 'stake'
+      if (typeof window !== 'undefined') {
+        window.__UBCEO_PAYMENT_CONTEXT__ = 'stake';
+      }
+      if (typeof openPayMethodModal === 'function') {
+        openPayMethodModal(finalAmount);
+      } else if (typeof openStakePayment === 'function') {
+        openStakePayment(finalAmount);
+      }
+    } catch (e) {}
+});
+
+}
+
+    // Show Next Stage button only if not final stage
+    if (resultNextBtn) {
+      resultNextBtn.style.display = 'none'; // controlled by qualification logic
+    }
+
+  setTimeout(() => { if (resultOkBtn) resultOkBtn.focus(); }, 0);
+}
+
+
+
+
+function openTrainingSemiModal(minWords) {
+  document.body.classList.add('training-semi-open');
+  if (trainingSemiOverlay) trainingSemiOverlay.setAttribute('aria-hidden', 'false');
+  if (trainingSemiModal) trainingSemiModal.setAttribute('aria-hidden', 'false');
+
+  if (trainingSemiHintEl) {
+    trainingSemiHintEl.textContent = `Minimum required length: ${minWords} words (2× Round 1).`;
+  }
+  if (trainingSemiTextEl) {
+    trainingSemiTextEl.value = '';
+    setTimeout(() => trainingSemiTextEl.focus(), 0);
+  }
+}
+
+function closeTrainingSemiModal() {
+  document.body.classList.remove('training-semi-open');
+  if (trainingSemiOverlay) trainingSemiOverlay.setAttribute('aria-hidden', 'true');
+  if (trainingSemiModal) trainingSemiModal.setAttribute('aria-hidden', 'true');
+}
+
+function countWords(str) {
+  return (str || '').trim().split(/\s+/).filter(Boolean).length;
+}
+// === DEFINITIVE TRAINING SEMI FINAL START HANDLER ===
+if (trainingSemiStartBtn) {
+  trainingSemiStartBtn.addEventListener('click', () => {
+    const textVal = (trainingSemiTextEl && trainingSemiTextEl.value || '').trim();
+    const minWords = Math.max(1, round1TrainingWordCount * 2);
+    const wc = countWords(textVal);
+
+    if (wc < minWords) {
+      if (trainingSemiHintEl) {
+        trainingSemiHintEl.textContent = `❌ Text too short. Minimum ${minWords} words required (you pasted ${wc}).`;
+      }
+      return;
+    }
+
+    // Close training modal
+    closeTrainingSemiModal();
+
+
+    // Set stage to Semi Final (Round 2)
+    stageIndex = 1;
+    const roundLabel = document.getElementById('round-label');
+    if (roundLabel) roundLabel.textContent = 'Round 2 (Semi Final)';
+    if (typeof updateUserInfoStage === 'function') updateUserInfoStage();
+    // Setup Semi Final game using NEW text
+    paragraphs = splitTextIntoParagraphs(textVal);
+      
+
+    currentParagraphIndex = 0;
+    correctCount = 0;
+    wrongCount = 0;
+    inputCount = 0;
+    currentWords = [];
+    gameEnded = false;
+
+    // Semi Final = 2× Round 1
+    if (round1TargetBlanks > 0) {
+      targetBlanks = Math.max(1, Math.ceil((round1TargetBlanks * 2) * 0.8));
+    }
+
+    gameStartedAt = Date.now();
+    setGameActive(true);
+    applyStageDifficulty();
+                targetBlanks = computeSemiTargetBlanks();
+
+    setTimeout(() => {
+      if (!gameEnded) endGame('timeout');
+    }, GAME_TIMEOUT_MS);
+
+    gameArea.innerHTML = '';
+    results.innerHTML = '';
+    updateScore();
+
+    try { clearEntryModals(); } catch (e) {}
+    showParagraph();
+  });
+}
+
+function openCountdownModal() {
+  document.body.classList.add('countdown-open');
+  if (countdownOverlay) countdownOverlay.setAttribute('aria-hidden', 'false');
+  if (countdownModal) countdownModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeCountdownModal() {
+  document.body.classList.remove('countdown-open');
+  if (countdownOverlay) countdownOverlay.setAttribute('aria-hidden', 'true');
+  if (countdownModal) countdownModal.setAttribute('aria-hidden', 'true');
+}
+
+function startCountdownToSemiFinal() {
+  let n = 3;
+  if (countdownNumberEl) countdownNumberEl.textContent = String(n);
+  openCountdownModal();
+
+  const tick = () => {
+    n -= 1;
+    if (countdownNumberEl) countdownNumberEl.textContent = String(n);
+
+    if (n <= 0) {
+      // show 0 briefly then start semi final
+      setTimeout(() => {
+        closeCountdownModal();
+
+        // move to Semi Final (Round 2) and auto start game
+        stageIndex = 1;
+
+        const roundLabel = document.getElementById('round-label');
+        if (roundLabel) roundLabel.textContent = 'Round 2 (Semi Final)';
+
+        // Ensure rules appear before starting Semi Final
+        rulesAccepted = false;
+
+        // Start Semi Final automatically:
+        // We trigger the same flow the user used (fans or student) by re-using stored data.
+        // If current category was Fans, we simulate starting Fans again.
+        // If Student, we simulate starting Student again.
+        if (form && form.dataset && form.dataset.category === 'Fans') {
+            // Earning mode: start Semi Final automatically with system prefilled text
+            openRulesModal(() => {
+              startSemiFinalWithPrefilledText();
+            });
+          } else {
+
+            // Student: Semi Final start
+            const modeEl = document.getElementById('mode');
+            const modeVal = modeEl ? modeEl.value : '';
+
+            if ((modeVal || '').toLowerCase() === 'training') {
+              // Training mode: after agreeing to rules, request a NEW text that is 2× longer than Round 1,
+              // then start Semi Final only after the user submits that text.
+              const minWords = Math.max(1, round1TrainingWordCount * 2);
+              rulesAccepted = false;
+              openRulesModal(() => {
+                openTrainingSemiModal(minWords);
+              });
+              return;
+            }
+
+            // Non-training: after agreeing to rules, start Semi Final normally (2× longer handled in submit flow)
+            rulesAccepted = false;
+            openRulesModal(() => {
+              // Earning mode: Semi Final uses system prefilled 2× longer text and auto-starts
+              startSemiFinalWithPrefilledText();
+            });
+            return;
+          }
+      }, 350);
+      return;
+    }
+
+    setTimeout(tick, 850);
+  };
+
+  setTimeout(tick, 850);
+}
+
+function closeResultModal() {
+  document.body.classList.remove('result-open');
+  if (resultOverlay) resultOverlay.setAttribute('aria-hidden', 'true');
+  if (resultModal) resultModal.setAttribute('aria-hidden', 'true');
+}
+
+if (resultOkBtn) {
+  resultOkBtn.addEventListener('click', () => {
+    closeResultModal();
+  });
+}
+
+  if (rulesContinueBtn) {
+    rulesContinueBtn.addEventListener('click', () => {
+      rulesAccepted = true;
+      closeRulesModal();
+
+      // If a specific continue action was provided, run it
+      if (typeof rulesOnContinue === 'function') {
+        const fn = rulesOnContinue;
+        rulesOnContinue = null;
+        fn();
+        return;
+      }
+
+      // Fallback: continue with the same submit flow (keeps existing logic untouched)
+      if (form && typeof form.requestSubmit === 'function') {
+        form.requestSubmit();
+      } else if (form) {
+        form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+      }
+    });
+  }
+
+
+    // ---- Initial flow: Student or Fans (locked, no cancel) ----
+  const roleOverlay = document.getElementById('role-overlay');
+
+  const roleModal = document.getElementById('role-modal');
+  const fansModal = document.getElementById('fans-modal');
+
+  const chooseStudentBtn = document.getElementById('choose-student');
+  const chooseFansBtn = document.getElementById('choose-fans');
+  const fansForm = document.getElementById('fans-form');
+  const fansFullname = document.getElementById('fans-fullname');
+  const fansWhatsapp = document.getElementById('fans-whatsapp');
+  const fansEmail = document.getElementById('fans-email');
+  const fansGender = document.getElementById('fans-gender');
+
+  // ---- Lucky Code gate (shows when user clicks PLAY NOW) ----
+  const luckyModal = document.getElementById('lucky-modal');
+  const luckyContinueBtn = document.getElementById('lucky-continue');
+  const luckyErrorEl = document.getElementById('lucky-error');
+  const luckySkipBtn = document.getElementById('lucky-skip');
+  const luckyInputs = Array.from(document.querySelectorAll('.lucky-in'));
+const luckyBoxes = Array.from(document.querySelectorAll('.lucky-box'));
+  const LUCKY_CODE = 'W3Y5JDY';
+
+  function resetLuckyInputs() {
+    luckyInputs.forEach((inp) => { inp.value = ''; });
+    if (luckyErrorEl) luckyErrorEl.style.display = 'none';
+    if (luckyContinueBtn) luckyContinueBtn.disabled = true;
+    setTimeout(() => { if (luckyInputs[0]) luckyInputs[0].focus(); }, 0);
+  }
+
+  function openLuckyModal() {
+    // Keep the same overlay system used by the entry flow
+    clearEntryModals();
+    document.body.classList.add('lucky-open');
+    roleOverlay.setAttribute('aria-hidden', 'false');
+    if (luckyModal) luckyModal.setAttribute('aria-hidden', 'false');
+    resetLuckyInputs();
+  }
+
+  function closeLuckyModal() {
+    document.body.classList.remove('lucky-open');
+    if (luckyModal) luckyModal.setAttribute('aria-hidden', 'true');
+  }
+
+  function syncLuckyState() {
+    if (!luckyContinueBtn) return;
+    const code = luckyInputs.map(i => (i.value || '').trim()).join('').toUpperCase();
+    const complete = code.length === 7 && !code.includes(' ');
+    luckyContinueBtn.disabled = !complete;
+    if (luckyErrorEl) luckyErrorEl.style.display = 'none';
+  }
+
+  // Auto-advance + keep one character per box
+  luckyInputs.forEach((inp, idx) => {
+    // Highlight active box (15% bigger) on focus
+    inp.addEventListener('focus', () => {
+      if (luckyBoxes) {
+        luckyBoxes.forEach(b => b.classList.remove('lucky-active'));
+      }
+      const box = inp.closest('.lucky-box');
+      if (box) box.classList.add('lucky-active');
+    });
+
+    inp.addEventListener('blur', () => {
+      const box = inp.closest('.lucky-box');
+      if (box) box.classList.remove('lucky-active');
+    });
+    inp.addEventListener('input', () => {
+      // force single char, uppercase
+      let v = (inp.value || '').toString().toUpperCase();
+      if (v.length > 1) v = v.slice(-1);
+      inp.value = v;
+
+      // move next
+      if (v && luckyInputs[idx + 1]) luckyInputs[idx + 1].focus();
+      syncLuckyState();
+    });
+
+    inp.addEventListener('keydown', (e) => {
+      const k = e.key;
+      if (k === 'Backspace' && !inp.value && luckyInputs[idx - 1]) {
+        luckyInputs[idx - 1].focus();
+      }
+      if (k === 'Enter') {
+        e.preventDefault();
+        if (luckyContinueBtn && !luckyContinueBtn.disabled) luckyContinueBtn.click();
+      }
+    });
+
+    inp.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const t = (e.clipboardData && e.clipboardData.getData('text')) ? e.clipboardData.getData('text') : '';
+      const cleaned = t.replace(/\s+/g,'').toUpperCase().slice(0,7);
+      if (!cleaned) return;
+      for (let i = 0; i < 7; i++) {
+        if (luckyInputs[i]) luckyInputs[i].value = cleaned[i] ? cleaned[i] : '';
+      }
+      if (luckyInputs[Math.min(cleaned.length,6)]) luckyInputs[Math.min(cleaned.length,6)].focus();
+      syncLuckyState();
+    });
+  });
+
+  if (luckyContinueBtn) {
+    luckyContinueBtn.addEventListener('click', () => {
+      const inputChars = luckyInputs.map(i => (i.value || '').trim().toUpperCase());
+      const code = inputChars.join('');
+
+      // Count how many characters match the lucky code (position-based)
+      let matches = 0;
+      for (let i = 0; i < LUCKY_CODE.length; i++) {
+        if (inputChars[i] && inputChars[i] === LUCKY_CODE[i]) matches++;
+      }
+
+      // Require at least ONE correct character to continue
+      if (matches < 1) {
+        if (luckyErrorEl) {
+          luckyErrorEl.textContent = 'Enter at least one correct lucky character.';
+          luckyErrorEl.style.display = 'block';
+        }
+        resetLuckyInputs();
+        return;
+      }
+
+      try {
+        window.__UBCEO_LUCKY_MATCHES__ = matches;
+      } catch (e) {}
+
+      closeLuckyModal();
+      // Continue exactly as before
+      openFormModal();
+    });
+  }
+
+  if (luckySkipBtn) {
+    luckySkipBtn.addEventListener('click', () => {
+      // User chose not to use lucky code: reset matches so payment is full
+      try {
+        window.__UBCEO_LUCKY_MATCHES__ = 0;
+      } catch (e) {}
+
+      closeLuckyModal();
+      // Continue without checking lucky code
+      openFormModal();
+    });
+  }
+
+
+
+    // ---- Stake flow (Magnus-dashboard.site-like) ----
+  const openStakeBtn = document.getElementById('open-support');
+  const supportModal = document.getElementById('support-modal');
+  const supportPaymentModal = document.getElementById('support-payment-modal');
+  const supportItems = document.querySelectorAll('.support-item');
+
+  const customAmountWrap = document.getElementById('custom-amount-wrap');
+  const customAmountInput = document.getElementById('custom-amount');
+  const customAmountContinue = document.getElementById('custom-amount-continue');
+
+  const payAmountEl = document.getElementById('pay-amount');
+  const payTimerEl = document.getElementById('pay-timer');
+
+  let paySecondsLeft = 60 * 60;
+  let payTimerInt = null;
+
+  
+  const TELEGRAM_PAYMENT_LINK = "https://t.me/magnus_dashboard_support"; // change to your real Telegram link
+
+  let selectedStakeAmount = 0;
+
+  const payMethodModal = document.getElementById('pay-method-modal');
+  const pmItems = document.querySelectorAll('.pm-item');
+
+  const usdtModal = document.getElementById('usdt-modal');
+  const usdtAmountEl = document.getElementById('usdt-amount');
+
+  function openPayMethodModal(amount) {
+    selectedStakeAmount = amount;
+
+    document.body.classList.remove('support-open');
+    document.body.classList.add('pm-open');
+
+    if (roleOverlay) roleOverlay.setAttribute('aria-hidden', 'false');
+    supportModal.setAttribute('aria-hidden', 'true');
+    payMethodModal.setAttribute('aria-hidden', 'false');
+  }
+
+  function openUsdtPayment(amount) {
+    document.body.classList.remove('pm-open');
+    document.body.classList.add('usdt-open');
+
+    if (roleOverlay) roleOverlay.setAttribute('aria-hidden', 'false');
+    payMethodModal.setAttribute('aria-hidden', 'true');
+    usdtModal.setAttribute('aria-hidden', 'false');
+
+    usdtAmountEl.textContent = `₦${Number(amount).toLocaleString()} (convert to USDT)`;
+  }
+function openStakeModal() {
+    document.body.classList.add('support-open');
+    roleOverlay.setAttribute('aria-hidden', 'false');
+    supportModal.setAttribute('aria-hidden', 'false');
+    roleModal.setAttribute('aria-hidden', 'true');
+  }
+
+  function openStakePayment(amount) {
+    document.body.classList.remove('support-open');
+    document.body.classList.add('support-pay-open');
+    if (roleOverlay) roleOverlay.setAttribute('aria-hidden', 'false');
+    supportModal.setAttribute('aria-hidden', 'true');
+    supportPaymentModal.setAttribute('aria-hidden', 'false');
+
+    const payTitleEl = document.getElementById('pay-title');
+    if (payTitleEl) {
+      const mode = (typeof window !== 'undefined' && window.__UBCEO_PAYMENT_CONTEXT__) || 'support';
+      payTitleEl.textContent = (mode === 'stake') ? 'Stake Payment' : 'Support Payment';
+    }
+
+    payAmountEl.textContent = `₦${Number(amount).toLocaleString()}`;
+    startTimer();
+  }
+
+  function fmt(n){ return String(n).padStart(2,'0'); }
+  function renderTimer() {
+    const h = Math.floor(paySecondsLeft / 3600);
+    const m = Math.floor((paySecondsLeft % 3600) / 60);
+    const s = paySecondsLeft % 60;
+    payTimerEl.textContent = `${fmt(h)}:${fmt(m)}:${fmt(s)}`;
+  }
+  function startTimer() {
+    if (payTimerInt) clearInterval(payTimerInt);
+    paySecondsLeft = 60 * 60;
+    renderTimer();
+    payTimerInt = setInterval(() => {
+      paySecondsLeft = Math.max(0, paySecondsLeft - 1);
+      renderTimer();
+      if (paySecondsLeft === 0) clearInterval(payTimerInt);
+    }, 1000);
+  }
+
+  if (openStakeBtn) openStakeBtn.addEventListener('click', openStakeModal);
+
+  supportItems.forEach(btn => {
+    // Support flow: mark context as 'support'
+    window.__UBCEO_PAYMENT_CONTEXT__ = 'support';
+    btn.addEventListener('click', () => {
+      const amt = btn.getAttribute('data-amount');
+      if (amt === 'custom') {
+        customAmountWrap.style.display = 'block';
+        setTimeout(() => customAmountInput.focus(), 0);
+      } else {
+        openPayMethodModal(Number(amt));
+      }
+    });
+  });
+
+  customAmountContinue.addEventListener('click', () => {
+    window.__UBCEO_PAYMENT_CONTEXT__ = 'support';
+    const val = Number(customAmountInput.value || 0);
+    if (val > 0) openPayMethodModal(val);
+  });
+
+  document.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-copy');
+      const el = document.getElementById(id);
+      if (!el) return;
+      try {
+        await navigator.clipboard.writeText(el.textContent.trim());
+        btn.textContent = 'Copied';
+        setTimeout(() => btn.textContent = 'Copy', 900);
+      } catch(e){}
+    });
+  });
+
+    // Payment method handlers
+  pmItems.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const method = btn.getAttribute('data-method');
+
+      if (method === 'opay' || method === 'foreign') {
+        const msg = encodeURIComponent(`Hello, I want to support the game via ${method.toUpperCase()}. Amount: ₦${Number(selectedStakeAmount).toLocaleString()}`);
+        window.open('https://t.me/MagnusGuru?text=Hello%20MagnusGuru,%20I%20have%20made%20a%20payment%20to%20support%20the%20game.%20Please%20find%20my%20payment%20proof%20attached.', '_blank');
+        return;
+      }
+
+      if (method === 'banks') {
+        openStakePayment(selectedStakeAmount);
+        return;
+      }
+
+      if (method === 'usdt') {
+        openUsdtPayment(selectedStakeAmount);
+        return;
+      }
+    });
+  });
+
+  document.getElementById('submit-usdt-proof').addEventListener('click', () => {
+    const amountText = usdtAmountEl.textContent.trim();
+    const payTo = 'USDT wallet (as shown in the game)';
+
+    const mode = (typeof window !== 'undefined' && window.__UBCEO_PAYMENT_CONTEXT__) || 'support';
+    const reason = mode === 'stake'
+      ? 'Stake payment for UBCEO Text Recall Game'
+      : 'Support payment for UBCEO Text Recall Game';
+    const action = mode === 'stake'
+      ? 'staked for the game via USDT'
+      : 'supported the game via USDT';
+
+    const msg = encodeURIComponent(
+      `Hello BBS agent, I have ${action}.
+
+` +
+      `Amount I paid: ${amountText}.
+` +
+      `Where I paid to: ${payTo}.
+` +
+      `Reason for payment: ${reason}.
+
+` +
+      `Here is my payment proof:`
+    );
+    window.open(`https://t.me/MagnusGuru?text=${msg}`, '_blank');
+  });
+
+  // ---- Back navigation ----
+  document.querySelectorAll('.back-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const from = btn.getAttribute('data-back');
+
+      document.body.classList.remove('support-open','pm-open','support-pay-open','usdt-open');
+
+      if (from === 'support-modal') {
+        document.body.classList.add('role-open');
+        roleModal.setAttribute('aria-hidden','false');
+        supportModal.setAttribute('aria-hidden','true');
+      }
+
+      if (from === 'pay-method-modal') {
+        document.body.classList.add('support-open');
+        supportModal.setAttribute('aria-hidden','false');
+        payMethodModal.setAttribute('aria-hidden','true');
+      }
+
+      if (from === 'support-payment-modal') {
+        document.body.classList.add('pm-open');
+        payMethodModal.setAttribute('aria-hidden','false');
+        supportPaymentModal.setAttribute('aria-hidden','true');
+      }
+
+      if (from === 'usdt-modal') {
+        document.body.classList.add('pm-open');
+        payMethodModal.setAttribute('aria-hidden','false');
+        usdtModal.setAttribute('aria-hidden','true');
+      }
+    });
+  });
+
+document.getElementById('submit-support-proof').addEventListener('click', () => {
+    const amountText = payAmountEl.textContent.trim();
+    const payTo = document.getElementById('pay-bank') ? document.getElementById('pay-bank').textContent.trim() : 'your BBS account';
+
+    const mode = (typeof window !== 'undefined' && window.__UBCEO_PAYMENT_CONTEXT__) || 'support';
+    const reason = mode === 'stake'
+      ? 'Stake payment for UBCEO Text Recall Game'
+      : 'Support payment for UBCEO Text Recall Game';
+    const action = mode === 'stake'
+      ? 'staked for the game'
+      : 'supported the game';
+
+    const msg = encodeURIComponent(
+      `Hello BBS agent, I have ${action}.
+
+` +
+      `Amount I paid: ${amountText}.
+` +
+      `Where I paid to: ${payTo}.
+` +
+      `Reason for payment: ${reason}.
+
+` +
+      `Here is my payment proof:`
+    );
+    window.open(`https://t.me/MagnusGuru?text=${msg}`, '_blank');
+  });
+function clearEntryModals() {
+    document.body.classList.remove('role-open', 'school-open', 'fans-open');
+    roleOverlay.setAttribute('aria-hidden', 'true');
+    roleModal.setAttribute('aria-hidden', 'true');
+    fansModal.setAttribute('aria-hidden', 'true');
+  }
+
+  function openRoleModal() {
+    clearEntryModals();
+    document.body.classList.add('role-open');
+    roleOverlay.setAttribute('aria-hidden', 'false');
+    roleModal.setAttribute('aria-hidden', 'false');
+  }
+
+  function openFansModal() {
+    clearEntryModals();
+    document.body.classList.add('fans-open');
+    roleOverlay.setAttribute('aria-hidden', 'false');
+    fansModal.setAttribute('aria-hidden', 'false');
+    setTimeout(() => fansFullname.focus(), 0);
+  }
+
+  chooseStudentBtn.addEventListener('click', () => { form.dataset.category = 'Student'; openLuckyModal(); });
+  if (chooseFansBtn) {
+    chooseFansBtn.addEventListener('click', () => { form.dataset.category = 'Fans'; openFansModal(); });
+  }
+
+  // Fans: show a smaller form, then auto-start with pre-made text
+  fansForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+
+    const name = fansFullname.value.trim();
+    const gender = fansGender.value;
+
+    // Display user info (Fans mode)
+    userInfo.innerHTML = `<strong>${name}</strong> | ${gender} | Fan | ${getStageName()}`;
+
+    // Use a pre-made text and start game immediately
+    const pick = PREMADE_TEXTS[Math.floor(Math.random() * PREMADE_TEXTS.length)];
+    paragraphs = splitTextIntoParagraphs(pick);
+
+    currentParagraphIndex = 0;
+    correctCount = 0;
+    wrongCount = 0;
+    inputCount = 0;
+    currentWords = [];
+
+    
+
+    // Show rules ONLY when the game is about to start
+    if (!rulesAccepted) {
+      openRulesModal(() => {
+            gameStartedAt = Date.now();
+    setGameActive(true);
+    applyStageDifficulty();
+                targetBlanks = computeSemiTargetBlanks();
+            setTimeout(() => { if (!gameEnded) endGame('timeout'); }, GAME_TIMEOUT_MS);
+        gameArea.innerHTML = '';
+            results.innerHTML = '';
+            updateScore();
+        
+            // Hide student form if it exists on the page (do not open it for fans)
+            form.style.display = 'none';
+        
+            clearEntryModals();
+            showParagraph();
+      });
+      return;
+    }
+
+    gameStartedAt = Date.now();
+    setGameActive(true);
+    applyStageDifficulty();
+                targetBlanks = computeSemiTargetBlanks();
+    setTimeout(() => { if (!gameEnded) endGame('timeout'); }, GAME_TIMEOUT_MS);
+gameArea.innerHTML = '';
+    results.innerHTML = '';
+    updateScore();
+
+    // Hide student form if it exists on the page (do not open it for fans)
+    form.style.display = 'none';
+
+    clearEntryModals();
+    showParagraph();
+  });
+window.addEventListener('load', openRoleModal);
+// ---- Game state ----
+  let paragraphs = [];
+  let currentParagraphIndex = 0;
+  let correctCount = 0;
+  let wrongCount = 0;
+  let currentWords = [];
+  let inputCount = 0;
+
+  // ---- Config ----
+  let targetBlanks = 15; // Number of blanks per paragraph (max)
+  let readTimeout;
+
+  
+
+  
+
+  // =========================
+  // Google Sheets submission (Apps Script Web App)
+  // =========================
+  // 1) Create a Google Apps Script Web App that writes POSTed JSON to your Sheet.
+  // 2) Paste the deployed Web App URL below (must be accessible publicly).
+  const GOOGLE_SHEETS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzKUh9YxCeFrlL0adBtwQkDGGzxvB_VSapbW98b3PCKxfpNIXbU4otQJIbeOxy-P76ljg/exec";
+
+  // Optional overall game timeout (milliseconds)
+  const GAME_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+
+  let gameStartedAt = 0;
+  let gameEnded = false;
+  let sheetSubmitted = false;
+
+  function nowStamp() {
+    return new Date().toISOString();
+  }
+
+  async function sendResultToGoogleSheet(reason) {
+    if (sheetSubmitted) return;
+    sheetSubmitted = true;
+
+    const payload = {
+      reason: reason || "completed",
+      timestamp: nowStamp(),
+      category: (form && form.dataset && form.dataset.category) ? form.dataset.category : "",
+      schoolName: (form && form.dataset && form.dataset.schoolName) ? form.dataset.schoolName : "",
+      fullname: (form && document.getElementById('fullname')) ? document.getElementById('fullname').value : (document.getElementById('fans-fullname') ? document.getElementById('fans-fullname').value : ""),
+      whatsapp: document.getElementById('fans-whatsapp') ? document.getElementById('fans-whatsapp').value : "",
+      email: document.getElementById('fans-email') ? document.getElementById('fans-email').value : "",
+      gender: (document.getElementById('gender') ? document.getElementById('gender').value : (document.getElementById('fans-gender') ? document.getElementById('fans-gender').value : "")),
+      emailAddress: document.getElementById('email-address') ? document.getElementById('email-address').value : "",
+      whatsappNumber: document.getElementById('whatsapp-number') ? document.getElementById('whatsapp-number').value : "",
+      purpose: document.getElementById('mode') ? document.getElementById('mode').value : "",
+      correct: correctCount,
+      wrong: wrongCount
+    };
+
+    // If URL is not configured, skip silently.
+    if (!GOOGLE_SHEETS_WEB_APP_URL || GOOGLE_SHEETS_WEB_APP_URL.includes("PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE")) return;
+
+    try {
+      // no-cors allows sending from static HTML without CORS setup
+      await fetch(GOOGLE_SHEETS_WEB_APP_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+    } catch (e) {
+      // ignore network errors (still keeps game working)
+    }
+  }
+
+  function endGame(reason) {
+    if (gameEnded) return;
+    gameEnded = true;
+    if (getSelectedMode() === 'earning') clearEarningProgress();
+
+
+    setGameActive(false);
+    // Show result popup immediately when game ends (same style as the first popup)
+    const totalQ = (correctCount || 0) + (wrongCount || 0);
+    const totalQuestions = (correctCount || 0) + (wrongCount || 0);
+    const scorePercent = totalQuestions > 0 ? Math.round(((correctCount || 0) / totalQuestions) * 100) : 0;
+
+    const nameLine = (userInfo && userInfo.textContent) ? userInfo.textContent : '';
+    openResultModal({
+      correct: (correctCount || 0),
+      wrong: (wrongCount || 0),
+      total: totalQ,
+      nameLine,
+      subtitle: `${getStageName()} — ` + ((reason === 'timeout') ? 'Time up — your result has been recorded.' : (reason === 'left') ? 'You left the page — game ended.' : 'Completed — your result has been recorded.')
+    });
+
+    const summary = document.createElement('div');
+    const totalQ2 = (correctCount || 0) + (wrongCount || 0);
+    summary.innerHTML = `<h3>Game Completed</h3><p>✅ Correct: ${correctCount}</p><p>❌ Wrong: ${wrongCount}</p><p>📌 Total Questions: ${totalQ2}</p>`;
+    results.appendChild(summary);
+
+    sendResultToGoogleSheet(reason || "completed");
+  }
+// ---- Pre-made texts (used when mode = 'For Earning') ----
+  const PREMADE_TEXTS = [
+    "Software engineering is the discipline of designing, building, testing, and maintaining software systems. A good developer thinks in systems: inputs, processes, outputs, and feedback. When you write code, you are also writing instructions for future you and for other people. Clear naming, small functions, and simple logic reduce bugs. Testing helps you confirm that your code works today and still works tomorrow after changes. Debugging is not a talent; it is a method: reproduce the issue, isolate the cause, inspect the state, and fix one thing at a time. Version control helps you track changes and collaborate safely. Documentation, even short notes, prevents confusion. Consistency beats speed, and small daily progress compounds over time.",
+    "Cybersecurity is not only about tools; it is also about people, process, and policy. Governance sets the direction, risk management measures the impact of threats, and compliance ensures the organization meets standards and regulations. Strong security starts with basics: strong passwords, multi factor authentication, least privilege, and regular updates. Incident response planning helps teams react quickly when something goes wrong. Logging and monitoring provide visibility into unusual activity. Security awareness training reduces social engineering success. Backups protect against data loss and ransomware. When security is treated as a shared responsibility, systems become harder to break and easier to recover.",
+    "Learning is a loop: study, practice, feedback, and repetition. When you read a topic, write notes in your own words. Then build a small project that forces you to use what you learned. If you are stuck, break the problem into tiny parts and solve one part at a time. Keep your projects simple but complete: start, middle, and finish. Over time, you will notice patterns and your confidence will grow. Ask good questions and verify answers with experiments. Measure your progress weekly, not hourly. Rest matters, but so does consistency. A focused hour daily can beat a whole day of distracted effort."
+  ];
+
+// Semi Final uses extremely different prefilled texts with NO paragraph repetition (earning mode)
+const SEMI_PARAGRAPHS = ['City maintenance is invisible until it fails. Streetlights, drainage, and water pipes are checked on schedules, not by luck. When repairs happen early, the whole system stays quiet and reliable.', 'Traffic flow depends on timing. A single blocked junction can create delays far away. That is why engineers study patterns and adjust signals to keep movement steady.', 'Power supply is balanced minute by minute. When demand spikes, operators switch sources and protect equipment. Stability is not accidental; it is planned and monitored.', 'Public health systems prepare for crowding by training staff, stocking supplies, and writing emergency routines. Small improvements in response time can save many lives.', 'Learning improves when you practice recall. Short quizzes force the brain to retrieve information, which strengthens memory more than rereading the same page again.', 'Sleep helps the brain organize what you learned. During deep rest, useful memories are strengthened while noise is reduced, making recall easier the next day.', 'Spacing is powerful. Studying in smaller sessions over several days forces repeated retrieval, which makes knowledge stick longer than one long night of study.', 'Money moves through choices. People earn, spend, save, and invest based on needs and priorities. When many people want the same thing, prices can rise.', 'Loans can help businesses grow by buying tools, hiring workers, or expanding services. Interest is the cost of borrowing and the reward for lending responsibly.', 'Good financial habits are simple: track spending, avoid debt traps, build an emergency fund, and invest patiently. Consistency often beats speed.', 'Teams win with communication. A clear plan and calm execution can beat raw talent that is disorganized or emotional under pressure.', 'Pressure changes decision-making. Some people rush, others freeze, and some stay steady. Training builds habits that reduce errors when stress is high.', 'Preparation is routine. Warm-ups, fundamentals, and review sessions make performance more stable. The basics repeated daily become automatic in real competition.', "Technology systems need backups. When one service fails, fallback options keep users running. Reliability comes from planning for failure, not pretending it won't happen.", 'Data helps decisions. When you measure results, you can improve processes instead of guessing. Clear metrics make progress visible and repeatable.', 'Discipline is a skill. Small actions done daily create momentum, while random bursts of effort often fade. Long-term results come from steady practice.'];
+
+function ensureSemiPoolSize(minSize) {
+  // Best-effort: if pool is too small, append additional unique paragraphs (no repetition).
+  while (SEMI_PARAGRAPHS.length < minSize) {
+    SEMI_PARAGRAPHS.push(`Extra semi final paragraph ${SEMI_PARAGRAPHS.length + 1}. This section is intentionally unique to prevent repetition and to extend the semi final length when needed.`);
+  }
+}
+
+
+
+function pickSemiPrefilledText() {
+  const desired = (round1CardCount > 0) ? (round1CardCount * 2) : ((round1ParagraphCount > 0) ? (round1ParagraphCount * 2) : 6);
+
+  // Pick unique paragraphs (no repetition)
+  const pool = SEMI_PARAGRAPHS.slice();
+
+  // Shuffle
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+  }
+
+  const chosen = pool.slice(0, Math.min(desired, pool.length));
+  return chosen.join("\n\n");
+}
+
+function computeSemiTargetBlanks() {
+  // Semi Final: 2× Round 1 blanks, then reduce by 30%
+  const base = (round1TargetBlanks > 0) ? (round1TargetBlanks * 2) : targetBlanks;
+  return Math.max(1, Math.ceil(base * 0.7));
+}
+
+function updateUserInfoStage() {
+  if (!userInfo) return;
+  const stage = getStageName();
+  const parts = userInfo.innerHTML.split(' | ');
+  const last = parts[parts.length - 1] || '';
+  if (last.includes('Round') || last.includes('Semi') || last.includes('Go Live')) {
+    parts[parts.length - 1] = stage;
+  } else {
+    parts.push(stage);
+  }
+  userInfo.innerHTML = parts.join(' | ');
+}
+
+function startSemiFinalWithPrefilledText() {
+  // Ensure stage is Semi Final
+  stageIndex = 1;
+
+        const roundLabel = document.getElementById('round-label');
+        if (roundLabel) roundLabel.textContent = 'Round 2 (Semi Final)';
+  updateUserInfoStage();
+
+  const semiText = pickSemiPrefilledText();
+  paragraphs = splitTextIntoParagraphs(semiText);
+
+  currentParagraphIndex = 0;
+  correctCount = 0;
+  wrongCount = 0;
+  inputCount = 0;
+  currentWords = [];
+  gameEnded = false;
+
+  // Set Semi Final blanks with 20% reduced difficulty
+  targetBlanks = computeSemiTargetBlanks();
+
+  gameStartedAt = Date.now();
+  setGameActive(true);
+  applyStageDifficulty();
+  targetBlanks = computeSemiTargetBlanks(); // keep reduction applied
+
+  setTimeout(() => { if (!gameEnded) endGame('timeout'); }, GAME_TIMEOUT_MS);
+
+  gameArea.innerHTML = '';
+  results.innerHTML = '';
+  updateScore();
+
+  try { clearEntryModals(); } catch (e) {}
+  showParagraph();
+}
+
+
+
+
+  function setMode(mode) {
+    if (mode === 'training') {
+      userTextWrap.style.display = 'block';
+      userTextArea.required = true;
+      // If user previously chose earning, clear the auto text so they can paste theirs
+      if (userTextArea.dataset.autofilled === '1') {
+        userTextArea.value = '';
+        userTextArea.dataset.autofilled = '0';
+      }
+    } else if (mode === 'earning') {
+      userTextWrap.style.display = 'none';
+      userTextArea.required = false;
+
+      // Auto-load one of the pre-made texts
+      const pick = PREMADE_TEXTS[Math.floor(Math.random() * PREMADE_TEXTS.length)];
+      userTextArea.value = pick;
+      userTextArea.dataset.autofilled = '1';
+    } else {
+      // No selection yet
+      userTextWrap.style.display = 'none';
+      userTextArea.required = false;
+      userTextArea.value = '';
+      userTextArea.dataset.autofilled = '0';
+    }
+  }
+  
+  // =========================
+  // Earning Resume (local) - NOT applicable to Training
+  // =========================
+  const EARNING_SAVE_KEY = 'ubceo_earning_progress_v1';
+
+  function getSelectedMode() {
+    return (modeSelect && modeSelect.value) ? String(modeSelect.value).toLowerCase() : '';
+  }
+
+  function collectInputStates() {
+    const inputs = Array.from(document.querySelectorAll('#game-area input.word-input'));
+    return inputs.map(inp => ({
+      index: Number(inp.getAttribute('data-index')),
+      value: inp.value || '',
+      disabled: !!inp.disabled,
+      className: inp.className || ''
+    }));
+  }
+
+  function saveEarningProgress(phase, extra = {}) {
+    try {
+      if (getSelectedMode() !== 'earning') return;
+      const payload = {
+        v: 1,
+        savedAt: Date.now(),
+        mode: 'earning',
+        stageIndex: typeof stageIndex !== 'undefined' ? stageIndex : 0,
+        currentParagraphIndex: typeof currentParagraphIndex !== 'undefined' ? currentParagraphIndex : 0,
+        correctCount: typeof correctCount !== 'undefined' ? correctCount : 0,
+        wrongCount: typeof wrongCount !== 'undefined' ? wrongCount : 0,
+        inputCount: typeof inputCount !== 'undefined' ? inputCount : 0,
+        targetBlanks: typeof targetBlanks !== 'undefined' ? targetBlanks : 0,
+        text: userTextArea ? (userTextArea.value || '') : '',
+        phase: phase || 'reading',
+        ...extra
+      };
+      localStorage.setItem(EARNING_SAVE_KEY, JSON.stringify(payload));
+    } catch (e) {}
+  }
+
+  function loadEarningProgress() {
+    try {
+      const raw = localStorage.getItem(EARNING_SAVE_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!data || data.mode !== 'earning') return null;
+      return data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function clearEarningProgress() {
+    try { localStorage.removeItem(EARNING_SAVE_KEY); } catch (e) {}
+  }
+
+  function restoreInputsFromSaved(saved) {
+    try {
+      if (!saved || !Array.isArray(saved.inputs)) return;
+      // Apply values/classes/disabled
+      saved.inputs.forEach(st => {
+        const el = document.querySelector(`#game-area input.word-input[data-index="${st.index}"]`);
+        if (!el) return;
+        el.value = st.value || '';
+        el.className = st.className || el.className;
+        el.disabled = !!st.disabled;
+
+        // Restore hint for wrong answers
+        if (el.disabled && (el.className || '').includes('wrong')) {
+          const hint = document.getElementById(`hint-${st.index}`);
+          const target = (Array.isArray(currentWords) ? currentWords.find(w => w.index === st.index) : null);
+          if (hint && target) hint.textContent = target.word;
+        }
+        if (el.disabled && (el.className || '').includes('correct')) {
+          const hint = document.getElementById(`hint-${st.index}`);
+          if (hint) hint.textContent = '';
+        }
+      });
+
+      // Restore inputCount (or recompute)
+      if (typeof saved.inputCount === 'number') {
+        inputCount = saved.inputCount;
+      } else {
+        inputCount = Array.from(document.querySelectorAll('#game-area input.word-input[disabled]')).length;
+      }
+
+      // Focus next available input
+      const next = document.querySelector(`#game-area input.word-input:not([disabled])`);
+      if (next) next.focus();
+    } catch (e) {}
+  }
+
+  function resumeEarningIfAvailable() {
+    const saved = loadEarningProgress();
+    if (!saved) return false;
+
+    // Ensure the same mode (earning)
+    if (getSelectedMode() !== 'earning') return false;
+
+    // Load saved text (earning text is prefilled; we must reuse exact one)
+    if (userTextArea) userTextArea.value = saved.text || '';
+
+    // Restore core state
+    stageIndex = typeof saved.stageIndex === 'number' ? saved.stageIndex : 0;
+    currentParagraphIndex = typeof saved.currentParagraphIndex === 'number' ? saved.currentParagraphIndex : 0;
+    correctCount = typeof saved.correctCount === 'number' ? saved.correctCount : 0;
+    wrongCount = typeof saved.wrongCount === 'number' ? saved.wrongCount : 0;
+    inputCount = typeof saved.inputCount === 'number' ? saved.inputCount : 0;
+
+    // Rebuild paragraphs from the same saved text
+    paragraphs = splitTextIntoParagraphs(saved.text || '');
+
+    // Keep Semi Final behavior consistent
+    if (stageIndex === 1) {
+      paragraphs = paragraphs.concat(paragraphs);
+      if (round1TargetBlanks > 0) targetBlanks = Math.max(1, Math.ceil((round1TargetBlanks * 2) * 0.8));
+    }
+
+    // Lock the form away and resume
+    form.style.display = 'none';
+    setGameActive(true);
+    applyStageDifficulty();
+    updateScore();
+
+    gameArea.innerHTML = '';
+    results.innerHTML = '';
+
+    showParagraph();
+
+    // If we saved during blanks phase, auto-render blanks with the same indexes
+    if (saved.phase === 'blanks' && saved.blockId && Array.isArray(saved.indexes)) {
+      window.__earningResume = {
+        blockId: saved.blockId,
+        indexes: saved.indexes,
+        inputs: saved.inputs || [],
+        inputCount: saved.inputCount
+      };
+      setTimeout(() => {
+        try { startBlanks(saved.blockId); } catch (e) {}
+      }, 0);
+    }
+
+    return true;
+  }
+
+
+  // Mode must be selected before starting
+  modeSelect.addEventListener('change', () => setMode(modeSelect.value));
+
+  // Initialize locked state
+  setMode(modeSelect.value);
+// =========================
+  // Helpers
+  // =========================
+  function updateScore() {
+    scoreBoard.innerHTML = `✅ ${correctCount} | ❌ ${wrongCount}`;
+  }
+
+  function splitTextIntoParagraphs(text) {
+    const allWords = text.trim().split(/\s+/);
+    const out = [];
+    for (let i = 0; i < allWords.length; i += 50) {
+      out.push(allWords.slice(i, i + 50).join(" "));
+    }
+    return out;
+  }
+
+  // =========================
+  // Game flow
+  // =========================
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+
+    // ===== Earning Resume: if user selected earning, continue from last saved spot =====
+    if (getSelectedMode() === 'earning') {
+      const didResume = resumeEarningIfAvailable();
+      if (didResume) return;
+    }
+
+    
+
+    // Show rules immediately when user clicks Start Game (one-time)
+    if (!rulesAccepted) {
+      openRulesModal(() => {
+        if (form && typeof form.requestSubmit === 'function') {
+          form.requestSubmit();
+        } else if (form) {
+          form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        }
+      });
+      return;
+    }
+
+    // Close popup once the game starts
+    closeFormModal();
+const name = document.getElementById('fullname').value;
+    const gender = document.getElementById('gender').value;
+    const emailAddress = document.getElementById('email-address') ? document.getElementById('email-address').value : "";
+    const whatsappNumber = document.getElementById('whatsapp-number') ? document.getElementById('whatsapp-number').value : "";
+    const text = document.getElementById('user-text').value;
+
+    // Display user header info
+    userInfo.innerHTML = `<strong>${name}</strong> | ${gender}${emailAddress ? ` | ${emailAddress}` : ''}${whatsappNumber ? ` | ${whatsappNumber}` : ''} | ${getStageName()}`;
+
+    // Build paragraphs
+    paragraphs = splitTextIntoParagraphs(text);
+
+    if (stageIndex === 1) {
+      // Semi Final fallback: 2× length, reduced difficulty by 20%
+      paragraphs = paragraphs.concat(paragraphs);
+      if (round1TargetBlanks > 0) targetBlanks = Math.max(1, Math.ceil((round1TargetBlanks * 2) * 0.8));
+    }
+
+    if (stageIndex === 0) {
+      round1ParagraphCount = paragraphs.length;
+      round1CardCount = paragraphs.length;
+      round1TargetBlanks = targetBlanks;
+      round1TrainingWordCount = countWords(text);
+    }
+
+    // Reset state
+    currentParagraphIndex = 0;
+    correctCount = 0;
+    wrongCount = 0;
+    inputCount = 0;
+    currentWords = [];
+
+    
+    gameStartedAt = Date.now();
+    setGameActive(true);
+    applyStageDifficulty();
+                targetBlanks = computeSemiTargetBlanks();
+    setTimeout(() => { if (!gameEnded) endGame('timeout'); }, GAME_TIMEOUT_MS);
+// Reset UI
+    gameArea.innerHTML = '';
+    results.innerHTML = '';
+    updateScore();
+
+    // Hide form and begin
+    form.style.display = 'none';
+    showParagraph();
+  });
+
+  function showParagraph() {
+    // End condition
+    if (currentParagraphIndex >= paragraphs.length) {
+      endGame('completed');
+      return;
+    }
+
+    const para = paragraphs[currentParagraphIndex];
+    const words = para.split(' ');
+
+    const paragraphBlock = document.createElement('div');
+    paragraphBlock.className = 'paragraph-block';
+    paragraphBlock.id = `para-${currentParagraphIndex}`;
+
+    // Auto-start blanks after a read-time window (preserved formula)
+    const readTime = words.length * 2000;
+
+    paragraphBlock.innerHTML = `
+      <p>${para}</p>
+      <div class='center-button'>
+        <button onclick="startBlanks('${paragraphBlock.id}')">I finished reading</button>
+      </div>
+    `;
+
+    gameArea.appendChild(paragraphBlock);
+    paragraphBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    saveEarningProgress('reading', { blockId: paragraphBlock.id });
+
+    readTimeout = setTimeout(() => {
+      startBlanks(paragraphBlock.id);
+    }, readTime);
+  }
+
+  // =========================
+  // Blanks + Checking
+  // =========================
+  function pickRandomIndexes(wordCount, blanks) {
+    const indexes = [];
+    while (indexes.length < blanks) {
+      const rand = Math.floor(Math.random() * wordCount);
+      if (!indexes.includes(rand)) indexes.push(rand);
+    }
+    return indexes;
+  }
+
+  // Exposed globally for inline onclick in HTML (preserved behavior)
+  window.startBlanks = function startBlanks(blockId) {
+    clearTimeout(readTimeout);
+
+    const block = document.getElementById(blockId);
+    const para = paragraphs[currentParagraphIndex];
+    const words = para.split(' ');
+
+    const blanks = Math.min(targetBlanks, words.length);
+    let indexes = pickRandomIndexes(words.length, blanks);
+    // Resume support (earning only): reuse the exact indexes from last time
+    if (getSelectedMode() === 'earning' && window.__earningResume && window.__earningResume.blockId === blockId && Array.isArray(window.__earningResume.indexes)) {
+      indexes = window.__earningResume.indexes.slice();
+    }
+
+    currentWords = indexes.map(i => ({ index: i, word: words[i] }));
+    inputCount = 0;
+
+    const modifiedWords = words.map((word, i) => {
+      if (indexes.includes(i)) {
+        const size = Math.max(word.length, 5);
+        return `
+          <span class='word-container' style='display:inline-block;'>
+            <div id='hint-${i}' class='correct-word'></div>
+            <input
+              class='word-input'
+              type='text'
+              maxlength='${word.length}'
+              style='width:${size * 10}px'
+              data-index='${i}'
+              oninput='checkInput(this)'
+            />
+          </span>
+        `;
+      }
+      return word;
+    });
+
+    block.innerHTML = `<p>${modifiedWords.join(' ')}</p>`;
+
+    // Save blanks state (earning only)
+    saveEarningProgress('blanks', { blockId, indexes, inputs: collectInputStates() });
+
+    // If resuming, restore previous input states exactly once
+    if (getSelectedMode() === 'earning' && window.__earningResume && window.__earningResume.blockId === blockId) {
+      const saved = window.__earningResume;
+      window.__earningResume = null;
+      setTimeout(() => restoreInputsFromSaved(saved), 0);
+    }
+  };
+
+  // Exposed globally for inline oninput in HTML (preserved behavior)
+  
+  window.addEventListener('beforeunload', () => { if (!gameEnded) sendResultToGoogleSheet('timeout'); });
+
+window.checkInput = function checkInput(input) {
+    const index = parseInt(input.getAttribute('data-index'));
+    const value = input.value.trim();
+    const target = currentWords.find(w => w.index === index);
+
+    if (!target || input.disabled) return;
+
+    const hint = document.getElementById(`hint-${index}`);
+
+    if (value.length >= target.word.length) {
+      if (value.toLowerCase() === target.word.toLowerCase()) {
+        input.classList.add("correct");
+        input.disabled = true;
+        hint.textContent = "";
+        correctCount++;
+      } else {
+        input.classList.add("wrong");
+        input.disabled = true;
+        hint.textContent = target.word;
+        wrongCount++;
+      }
+
+            saveEarningProgress('blanks', { blockId: `para-${currentParagraphIndex}`, indexes: currentWords.map(w=>w.index), inputs: collectInputStates() });
+updateScore();
+      inputCount++;
+
+      const next = document.querySelector(`input.word-input:not([disabled])`);
+      if (next) next.focus();
+
+      if (inputCount === currentWords.length) {
+        currentParagraphIndex++;
+        showParagraph();
+      }
+    }
+  };
+</script>
+</body>
+</html>
